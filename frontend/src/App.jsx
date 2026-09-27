@@ -1,3 +1,4 @@
+import { Navigate, Route, Routes } from 'react-router'
 import Login from './Login.jsx'
 
 function App() {
@@ -6,7 +7,12 @@ function App() {
     console.log('Logging in as', username)
   }
 
-  return <Login onLogin={handleLogin} />
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/login" element={<Login onLogin={handleLogin} />} />
+    </Routes>
+  )
 }
 
 export default App
