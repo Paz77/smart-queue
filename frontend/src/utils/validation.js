@@ -9,3 +9,11 @@ export function required(value, label) {
 export function isEmail(value) {
   return EMAIL_PATTERN.test(String(value ?? '').trim()) ? '' : 'Enter a valid email address.'
 }
+
+export function maxLength(value, max, label) {
+  return String(value ?? '').trim().length <= max ? '' : `${label} must be ${max} characters or fewer.`
+}
+
+export function minLength(value, min, label) {
+  return String(value ?? '').length >= min ? '' : `${label} must be at least ${min} characters.`
+}
