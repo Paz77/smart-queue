@@ -1,8 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { FogBackdrop } from './components/FogBackdrop'
 import { Layout } from './components/Layout'
 import { Placeholder } from './components/Placeholder'
 import Login from './pages/auth/Login'
+import Register from './pages/auth/Register'
 import History from './pages/user/History'
 import QueueStatus from './pages/user/QueueStatus'
 
@@ -11,15 +11,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
-      <Route
-        path="/register"
-        element={
-          <div className="mx-auto max-w-md px-4 py-16">
-            <FogBackdrop />
-            <Placeholder title="Create account" />
-          </div>
-        }
-      />
+      <Route path="/register" element={<Register />} />
 
       <Route path="/app" element={<Layout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
