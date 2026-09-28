@@ -1,18 +1,26 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { LogOut } from 'lucide-react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/auth'
 import { useOrganization } from '../context/organization'
 import { Brand } from './Brand'
+import { Button } from './Button'
 import { ADMIN_NAV, USER_NAV } from './nav'
 import { NotificationBell } from './NotificationBell'
 
 export function TopBar() {
-  const { currentUser } = useAuth()
+  const { currentUser, logout } = useAuth()
+  const navigate = useNavigate()
   const { organization, personLabel } = useOrganization()
   const isAdmin = useLocation().pathname.startsWith('/admin')
   const initials = currentUser?.name
     .split(' ')
     .map((part) => part[0])
     .join('')
+
+  function handleLogout() {
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <header className="sticky top-0 z-30 border-b border-line/70 bg-surface/70 backdrop-blur-xl">
@@ -34,6 +42,9 @@ export function TopBar() {
                 <p className="text-sm font-medium text-ink">{currentUser.name}</p>
                 <p className="text-xs text-ink-subtle">{currentUser.role === 'admin' ? 'Admin' : personLabel}</p>
               </div>
+              <Button variant="ghost" size="sm" onClick={handleLogout} aria-label="Log out" title="Log out" className="px-2">
+                <LogOut />
+              </Button>
             </div>
           )}
         </div>
