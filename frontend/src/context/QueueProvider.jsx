@@ -180,6 +180,22 @@ export function QueueProvider({ children }) {
     notify(service, { type: 'queue_update', title: `${service.name} is ${isOpen ? 'open' : 'closed'}`, message })
   }
 
+  // Add a service to the organization being shown. It starts closed; open it from the overview.
+  function createService(fields) {
+    const service = { id: `svc-${Date.now()}`, organizationId: organization.id, ...fields, isOpen: false }
+    setServices((prev) => [...prev, service])
+    notify(service, { type: 'service_update', title: 'Service created', message: `${service.name} was added to the list.` })
+    return service
+  }
+
+  // Change a service's name, description, expected duration or priority.
+  function updateService(serviceId, fields) {
+    const service = getService(serviceId)
+    if (!service) return
+    setServices((prev) => prev.map((s) => (s.id === serviceId ? { ...s, ...fields } : s)))
+    notify(service, { type: 'service_update', title: 'Changes saved', message: `${fields.name ?? service.name} is up to date.` })
+  }
+
   function clearServed() {
     setEntries((prev) =>
       prev.filter((e) => !(e.userId === currentUser?.id && !isActive(e) && inOrganization(e.serviceId))),
@@ -211,6 +227,8 @@ export function QueueProvider({ children }) {
     serveNext,
     moveEntry,
     setServiceOpen,
+    createService,
+    updateService,
     clearServed,
     resetOrganization,
   }
