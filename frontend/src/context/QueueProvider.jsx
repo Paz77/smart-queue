@@ -13,6 +13,14 @@ const isActive = (entry) => entry.status !== 'served'
 
 const reposition = (entry, position) => ({ ...entry, position, status: statusForPosition(position) })
 
+// Drop an entry from its line; everyone behind it moves up one place.
+const withoutEntry = (list, entry) =>
+  list
+    .filter((e) => e.id !== entry.id)
+    .map((e) =>
+      e.serviceId === entry.serviceId && isActive(e) && e.position > entry.position ? reposition(e, e.position - 1) : e,
+    )
+
 // Queue state backed by sample data. Each action below is where an API call
 // will go once there is a backend; screens only talk to this context.
 export function QueueProvider({ children }) {
@@ -22,6 +30,8 @@ export function QueueProvider({ children }) {
   const [services, setServices] = useState(seedServices)
   const [entries, setEntries] = useState(createQueueEntries)
   const [visits, setVisits] = useState(seedVisits)
+  // The last person called at each service, keyed by service id: { userName, calledAt }.
+  const [lastCalled, setLastCalled] = useState({})
 
   const getService = (serviceId) => services.find((s) => s.id === serviceId)
   const inOrganization = (serviceId) => getService(serviceId)?.organizationId === organization.id
@@ -94,26 +104,38 @@ export function QueueProvider({ children }) {
     if (!entry) return
     const service = getService(entry.serviceId)
 
-    setEntries((prev) =>
-      prev
-        .filter((e) => e.id !== entry.id)
-        .map((e) =>
-          e.serviceId === entry.serviceId && isActive(e) && e.position > entry.position
-            ? reposition(e, e.position - 1)
-            : e,
-        ),
-    )
+    setEntries((prev) => withoutEntry(prev, entry))
     recordVisit(entry, null, 'left')
     notify(service, { type: 'status_change', title: `Left ${service.name}`, message: 'You gave up your place in line.' })
   }
 
-  // Call a specific person to the desk; everyone behind them moves up one.
-  function serveEntry(entryId) {
+  // Staff take someone out of line; everyone behind them moves up one.
+  function removeEntry(entryId) {
     const entry = entries.find((e) => e.id === entryId && isActive(e))
     if (!entry) return
     const service = getService(entry.serviceId)
+    const me = entriesFor(entry.serviceId).find((e) => e.userId === currentUser?.id)
+
+    setEntries((prev) => withoutEntry(prev, entry))
+    recordVisit(entry, null, 'left')
+
+    if (entry.userId === currentUser?.id) {
+      notify(service, { type: 'status_change', title: `Removed from ${service.name}`, message: 'Staff took you out of the line.' })
+    } else if (me && me.position > entry.position) {
+      announceMove(service, me, me.position - 1)
+    }
+  }
+
+  // Call a specific person to the desk; everyone behind them moves up one.
+  // Returns the entry that was served, or null.
+  function serveEntry(entryId) {
+    const entry = entries.find((e) => e.id === entryId && isActive(e))
+    if (!entry) return null
+    const service = getService(entry.serviceId)
     const line = entriesFor(entry.serviceId)
     const servedAt = new Date().toISOString()
+
+    setLastCalled((prev) => ({ ...prev, [entry.serviceId]: { userName: entry.userName, calledAt: servedAt } }))
 
     setEntries((prev) =>
       prev
@@ -135,16 +157,17 @@ export function QueueProvider({ children }) {
         title: 'It is your turn',
         message: `${service.name} is ready for you. Please go to the service desk.`,
       })
-      return
+      return entry
     }
 
     const me = line.find((e) => e.userId === currentUser?.id)
     if (me && me.position > entry.position) announceMove(service, me, me.position - 1)
+    return entry
   }
 
   function serveNext(serviceId) {
     const [front] = entriesFor(serviceId)
-    if (front) serveEntry(front.id)
+    return front ? serveEntry(front.id) : null
   }
 
   // Move someone to a new place in their line; the others shift to make room.
@@ -160,6 +183,40 @@ export function QueueProvider({ children }) {
 
     const me = line.find((e) => e.userId === currentUser?.id)
     if (me && positions.get(me.id) !== me.position) announceMove(getService(entry.serviceId), me, positions.get(me.id))
+  }
+
+  // Open or close a service's line. People already in it keep their place.
+  function setServiceOpen(serviceId, isOpen) {
+    const service = getService(serviceId)
+    if (!service || service.isOpen === isOpen) return
+
+    setServices((prev) => prev.map((s) => (s.id === serviceId ? { ...s, isOpen } : s)))
+
+    const waiting = entriesFor(serviceId).length
+    const people = waiting === 1 ? organization.personSingular : organization.personPlural
+    let message = `${organization.personPlural} can join the line now.`
+    if (!isOpen) {
+      message = waiting
+        ? `The ${waiting} ${people.toLowerCase()} in line ${waiting === 1 ? 'keeps' : 'keep'} their place.`
+        : 'No one new can join.'
+    }
+    notify(service, { type: 'queue_update', title: `${service.name} is ${isOpen ? 'open' : 'closed'}`, message })
+  }
+
+  // Add a service to the organization being shown. It starts closed; open it from the overview.
+  function createService(fields) {
+    const service = { id: `svc-${Date.now()}`, organizationId: organization.id, ...fields, isOpen: false }
+    setServices((prev) => [...prev, service])
+    notify(service, { type: 'service_update', title: 'Service created', message: `${service.name} was added to the list.` })
+    return service
+  }
+
+  // Change a service's name, description, expected duration or priority.
+  function updateService(serviceId, fields) {
+    const service = getService(serviceId)
+    if (!service) return
+    setServices((prev) => prev.map((s) => (s.id === serviceId ? { ...s, ...fields } : s)))
+    notify(service, { type: 'service_update', title: 'Changes saved', message: `${fields.name ?? service.name} is up to date.` })
   }
 
   function clearServed() {
@@ -178,6 +235,7 @@ export function QueueProvider({ children }) {
     ])
     setEntries((prev) => [...prev.filter((e) => !ids.has(e.serviceId)), ...freshEntries])
     setVisits((prev) => [...prev.filter((v) => !ids.has(v.serviceId)), ...seedVisits.filter((v) => ids.has(v.serviceId))])
+    setLastCalled((prev) => Object.fromEntries(Object.entries(prev).filter(([serviceId]) => !ids.has(serviceId))))
   }
 
   const value = {
@@ -192,6 +250,11 @@ export function QueueProvider({ children }) {
     serveEntry,
     serveNext,
     moveEntry,
+    removeEntry,
+    getLastCalled: (serviceId) => lastCalled[serviceId] ?? null,
+    setServiceOpen,
+    createService,
+    updateService,
     clearServed,
     resetOrganization,
   }
