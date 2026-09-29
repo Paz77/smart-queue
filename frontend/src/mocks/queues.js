@@ -13,6 +13,9 @@ export function createQueueEntries() {
     { id: 'q-6', serviceId: 'svc-finaid', userId: 'u-4', userName: 'Elena Park', position: 1, joinedAt: minutesAgo(22), status: 'almost_ready' },
     { id: 'q-7', serviceId: 'svc-finaid', userId: 'u-3', userName: 'Marcus Webb', position: 2, joinedAt: minutesAgo(14), status: 'almost_ready' },
     { id: 'q-8', serviceId: 'svc-it', userId: 'u-5', userName: 'Sam Okafor', position: 1, joinedAt: minutesAgo(6), status: 'almost_ready' },
+    // Career Services is closed; these two joined before it closed and keep their place.
+    { id: 'q-15', serviceId: 'svc-career', userId: 'u-8', userName: 'Lucia Ferreira', position: 1, joinedAt: minutesAgo(22), status: 'almost_ready' },
+    { id: 'q-16', serviceId: 'svc-career', userId: 'u-9', userName: 'Noah Kim', position: 2, joinedAt: minutesAgo(15), status: 'almost_ready' },
 
     // Riverside Family Clinic
     { id: 'q-9', serviceId: 'svc-consult', userId: 'u-6', userName: 'Aisha Rahman', position: 1, joinedAt: minutesAgo(28), status: 'almost_ready' },

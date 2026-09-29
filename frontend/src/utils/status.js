@@ -25,6 +25,18 @@ export const STATUS_META = {
     className: 'bg-red-50 text-red-800 border-red-200',
     dot: 'bg-red-500',
   },
+
+  // Whether a service's queue is taking new people.
+  open: {
+    label: 'Open',
+    className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    dot: 'bg-emerald-600',
+  },
+  closed: {
+    label: 'Closed',
+    className: 'bg-red-50 text-red-800 border-red-200',
+    dot: 'bg-red-500',
+  },
 }
 
 export const STATUS_STEPS = ['waiting', 'almost_ready', 'served']

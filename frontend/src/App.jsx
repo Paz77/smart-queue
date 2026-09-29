@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { Placeholder } from './components/Placeholder'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import QueueManagement from './pages/admin/QueueManagement'
+import ServiceManagement from './pages/admin/ServiceManagement'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import History from './pages/user/History'
@@ -23,9 +26,9 @@ export default function App() {
 
       <Route path="/admin" element={<Layout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<Placeholder title="Overview" />} />
-        <Route path="services" element={<Placeholder title="Services" />} />
-        <Route path="queues/:serviceId?" element={<Placeholder title="Queues" />} />
+        <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="services" element={<ServiceManagement />} />
+        <Route path="queues/:serviceId?" element={<QueueManagement />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
