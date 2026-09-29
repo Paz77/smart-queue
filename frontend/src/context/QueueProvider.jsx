@@ -162,6 +162,24 @@ export function QueueProvider({ children }) {
     if (me && positions.get(me.id) !== me.position) announceMove(getService(entry.serviceId), me, positions.get(me.id))
   }
 
+  // Open or close a service's line. People already in it keep their place.
+  function setServiceOpen(serviceId, isOpen) {
+    const service = getService(serviceId)
+    if (!service || service.isOpen === isOpen) return
+
+    setServices((prev) => prev.map((s) => (s.id === serviceId ? { ...s, isOpen } : s)))
+
+    const waiting = entriesFor(serviceId).length
+    const people = waiting === 1 ? organization.personSingular : organization.personPlural
+    let message = `${organization.personPlural} can join the line now.`
+    if (!isOpen) {
+      message = waiting
+        ? `The ${waiting} ${people.toLowerCase()} in line ${waiting === 1 ? 'keeps' : 'keep'} their place.`
+        : 'No one new can join.'
+    }
+    notify(service, { type: 'queue_update', title: `${service.name} is ${isOpen ? 'open' : 'closed'}`, message })
+  }
+
   function clearServed() {
     setEntries((prev) =>
       prev.filter((e) => !(e.userId === currentUser?.id && !isActive(e) && inOrganization(e.serviceId))),
@@ -192,6 +210,7 @@ export function QueueProvider({ children }) {
     serveEntry,
     serveNext,
     moveEntry,
+    setServiceOpen,
     clearServed,
     resetOrganization,
   }
