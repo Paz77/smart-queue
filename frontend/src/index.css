@@ -23,7 +23,9 @@
   --color-sunken: #fafaf8;
   --color-ink: #16181d;
   --color-ink-muted: #545b68;
-  --color-ink-subtle: #8a909c;
+  /* Darkened to 4.6:1 on white so the small print (hints, timestamps, table
+     captions) clears the WCAG AA minimum of 4.5:1 for body text. */
+  --color-ink-subtle: #6f7684;
   --color-line: #e3e3de;
   --color-line-strong: #cdcdc6;
   --color-accent: #2b4c7e;
@@ -59,19 +61,6 @@
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-accent;
   }
-}
-
-/*
-  Hover focus: pointing at one item in a .focus-list softly blurs the others.
-  Put the class on any <ul> whose direct children are <li> items.
-*/
-.focus-list > li {
-  transition: filter 150ms ease-in-out, opacity 150ms ease-in-out;
-}
-
-.focus-list:has(> li:hover) > li:not(:hover) {
-  filter: blur(2px);
-  opacity: 0.7;
 }
 
 /*

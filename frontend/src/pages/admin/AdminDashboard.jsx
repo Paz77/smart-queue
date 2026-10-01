@@ -1,4 +1,4 @@
-import { Pencil, Plus, Settings2, Users } from 'lucide-react'
+import { Pencil, Plus, SearchX, Settings2, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../components/Button'
@@ -7,6 +7,8 @@ import { EmptyState } from '../../components/EmptyState'
 import { Modal } from '../../components/Modal'
 import { PageHeader } from '../../components/PageHeader'
 import { PriorityBadge } from '../../components/PriorityBadge'
+import { SearchInput } from '../../components/SearchInput'
+import { StatTile } from '../../components/StatTile'
 import { StatusBadge } from '../../components/StatusBadge'
 import { useOrganization } from '../../context/organization'
 import { useQueue } from '../../context/queue'
@@ -24,6 +26,7 @@ export default function AdminDashboard() {
   const { services, entriesFor, setServiceOpen } = useQueue()
   const { organization } = useOrganization()
   const [closingId, setClosingId] = useState(null)
+  const [query, setQuery] = useState('')
 
   const people = organization.personPlural.toLowerCase()
   const countPeople = (n) => `${n} ${n === 1 ? organization.personSingular.toLowerCase() : people}`
@@ -83,6 +86,12 @@ export default function AdminDashboard() {
 
   const closing = rows.find((s) => s.id === closingId)
 
+  // The tiles above always count every service; only the table below is filtered.
+  const search = query.trim().toLowerCase()
+  const visible = rows.filter(
+    (s) => !search || s.name.toLowerCase().includes(search) || s.description.toLowerCase().includes(search),
+  )
+
   // Closing a line with people in it asks first; everything else happens right away.
   function handleToggle(service) {
     if (service.isOpen && service.waiting > 0) setClosingId(service.id)
@@ -125,12 +134,39 @@ export default function AdminDashboard() {
       </div>
 
       <Card>
-        <CardHeader title="Services" description={`Switch a queue off to stop new ${people} from joining.`} />
+        <CardHeader
+          title="Services"
+          description={`Switch a queue off to stop new ${people} from joining.`}
+          action={
+            rows.length > 3 ? (
+              <SearchInput
+                label="Search by service name"
+                placeholder="Search services"
+                value={query}
+                onChange={setQuery}
+                className="w-44"
+              />
+            ) : undefined
+          }
+        />
+
+        {visible.length === 0 && (
+          <EmptyState
+            icon={SearchX}
+            title="No services match"
+            description="Try a different search term."
+            action={
+              <Button variant="secondary" size="sm" onClick={() => setQuery('')}>
+                Clear search
+              </Button>
+            }
+          />
+        )}
 
         {/* Narrow screens: one stacked card per service. */}
-        <ul className="focus-list divide-y divide-line xl:hidden">
-          {rows.map((service) => (
-            <li key={service.id} className={`px-4 py-4 sm:px-5 ${service.isOpen ? '' : 'bg-canvas/60'}`}>
+        <ul className="divide-y divide-line xl:hidden">
+          {visible.map((service) => (
+            <li key={service.id} className={`px-4 py-4 transition-colors sm:px-5 ${service.isOpen ? 'hover:bg-sunken' : 'bg-canvas/60 hover:bg-canvas'}`}>
               <div className="flex items-start justify-between gap-3">
                 <ServiceName service={service} wrap />
                 <QueueSwitch service={service} onToggle={handleToggle} />
@@ -162,7 +198,9 @@ export default function AdminDashboard() {
         <div className="hidden xl:block">
           <div
             aria-hidden="true"
-            className={`${COLUMNS} border-b border-line bg-sunken/70 px-5 py-2.5 text-[11px] font-semibold tracking-[0.08em] text-ink-subtle uppercase`}
+            className={`${COLUMNS} border-b border-line bg-sunken/70 px-5 py-2.5 text-[11px] font-semibold tracking-[0.08em] text-ink-subtle uppercase ${
+              visible.length === 0 ? 'hidden' : ''
+            }`}
           >
             <span>Service</span>
             <span>Priority</span>
@@ -172,9 +210,9 @@ export default function AdminDashboard() {
             <span>Wait if you join now</span>
             <span className="text-right">Open / close</span>
           </div>
-          <ul className="focus-list divide-y divide-line">
-            {rows.map((service) => (
-              <li key={service.id} className={`${COLUMNS} px-5 py-3 ${service.isOpen ? '' : 'bg-canvas/60'}`}>
+          <ul className="divide-y divide-line">
+            {visible.map((service) => (
+              <li key={service.id} className={`${COLUMNS} px-5 py-3 transition-colors ${service.isOpen ? 'hover:bg-sunken' : 'bg-canvas/60 hover:bg-canvas'}`}>
                 <ServiceName service={service} />
                 <div>
                   <PriorityBadge priority={service.priority} />
@@ -238,16 +276,6 @@ export default function AdminDashboard() {
         }
       />
     </>
-  )
-}
-
-function StatTile({ label, value, hint }) {
-  return (
-    <Card className="px-4 py-3.5 sm:px-5 sm:py-4">
-      <p className="text-[11px] font-semibold tracking-[0.08em] text-ink-subtle uppercase">{label}</p>
-      <p className="mt-2 text-2xl leading-8 font-semibold tracking-tight text-ink tabular-nums sm:text-[28px]">{value}</p>
-      {typeof hint === 'string' ? <p className="mt-2 text-xs text-ink-muted tabular-nums">{hint}</p> : hint}
-    </Card>
   )
 }
 

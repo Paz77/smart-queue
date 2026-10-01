@@ -1,5 +1,12 @@
 import { History, LayoutDashboard, ListPlus, Settings2, Timer, Users } from 'lucide-react'
 
+// Where each role lands after signing in, and where the route guard sends
+// anyone who opens a screen their role does not have.
+export const HOME_BY_ROLE = {
+  admin: '/admin/dashboard',
+  user: '/app/dashboard',
+}
+
 export const USER_NAV = [
   { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/app/join', label: 'Join a queue', icon: ListPlus },

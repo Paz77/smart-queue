@@ -3,15 +3,11 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthCard } from '../../components/AuthCard'
 import { Button } from '../../components/Button'
+import { HOME_BY_ROLE } from '../../components/nav'
 import { TextField } from '../../components/TextField'
 import { useAuth } from '../../context/auth'
 import { useOrganization } from '../../context/organization'
 import { isEmail, required } from '../../utils/validation'
-
-const HOME_BY_ROLE = {
-  admin: '/admin/dashboard',
-  user: '/app/dashboard',
-}
 
 function validate(field, value) {
   if (field === 'email') return required(value, 'Email') || isEmail(value)

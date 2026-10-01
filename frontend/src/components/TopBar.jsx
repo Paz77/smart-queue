@@ -6,6 +6,7 @@ import { Brand } from './Brand'
 import { Button } from './Button'
 import { ADMIN_NAV, USER_NAV } from './nav'
 import { NotificationBell } from './NotificationBell'
+import { SearchButton } from './SearchButton'
 
 export function TopBar() {
   const { currentUser, logout } = useAuth()
@@ -32,6 +33,7 @@ export function TopBar() {
         </div>
 
         <div className="flex items-center gap-3">
+          <SearchButton />
           <NotificationBell />
           {currentUser && (
             <div className="flex items-center gap-2.5 border-l border-line pl-3">

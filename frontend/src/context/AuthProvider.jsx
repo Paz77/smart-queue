@@ -4,8 +4,9 @@ import { AuthContext } from './auth'
 
 const normalizeEmail = (email) => email.trim().toLowerCase()
 
-// Starts signed in as the sample visitor until the login screen is connected.
-// Accounts created with register() last until the page reloads.
+// Starts signed in as the sample visitor so the demo opens on a populated screen;
+// log out to reach the login form. Sign-ins and accounts created with register()
+// last until the page reloads, which puts the sample visitor back.
 export function AuthProvider({ children }) {
   const [accounts, setAccounts] = useState(users)
   const [currentUser, setCurrentUser] = useState(users[0])

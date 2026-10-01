@@ -1,10 +1,11 @@
-import { History as HistoryIcon, ListPlus, Search, SearchX, X } from 'lucide-react'
+import { History as HistoryIcon, ListPlus, SearchX } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { EmptyState } from '../../components/EmptyState'
 import { PageHeader } from '../../components/PageHeader'
+import { SearchInput } from '../../components/SearchInput'
 import { StatusBadge } from '../../components/StatusBadge'
 import { useQueue } from '../../context/queue'
 import { formatDate, formatTime, formatWait, minutesBetween } from '../../utils/format'
@@ -16,7 +17,6 @@ const FILTERS = [
   { value: 'no_show', label: 'No-show' },
 ]
 
-const SEARCH_MAX_LENGTH = 100
 
 export default function History() {
   const { history, getService } = useQueue()
@@ -77,7 +77,7 @@ export default function History() {
     <>
       {header}
 
-      <dl className="mb-6 grid divide-y divide-line rounded-sm border border-line/80 bg-surface/92 shadow-card backdrop-blur-md sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <dl className="mb-6 grid divide-y divide-line rounded-sm border border-line/80 bg-surface/97 shadow-card backdrop-blur-md sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         <Stat label="Total visits" value={history.length} hint="Across all services" />
         <Stat label="Served" value={`${servedRate}%`} hint={`${served.length} of ${history.length} visits`} />
         <Stat label="Average wait" value={formatWait(averageWait)} hint="Completed visits only" />
@@ -104,28 +104,13 @@ export default function History() {
             ))}
           </div>
 
-          <label className="relative block w-full sm:w-64">
-            <span className="sr-only">Search by service name</span>
-            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ink-subtle" strokeWidth={1.75} />
-            <input
-              type="search"
-              value={query}
-              maxLength={SEARCH_MAX_LENGTH}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search services"
-              className="h-9 w-full rounded-sm border border-line-strong bg-surface pr-8 pl-8 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 [&::-webkit-search-cancel-button]:hidden"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                aria-label="Clear search"
-                className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded-xs text-ink-subtle hover:bg-sunken hover:text-ink"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </label>
+          <SearchInput
+            label="Search by service name"
+            placeholder="Search services"
+            value={query}
+            onChange={setQuery}
+            className="w-full sm:w-64"
+          />
         </div>
 
         {rows.length === 0 ? (

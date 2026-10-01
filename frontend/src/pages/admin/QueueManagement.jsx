@@ -83,7 +83,7 @@ function ServicePicker() {
         Choose a service
       </h2>
       <p className="mt-0.5 text-xs text-ink-muted">Pick one to see who’s waiting and call people up.</p>
-      <ul className="focus-list mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {services.map((service) => {
           const waiting = entriesFor(service.id).length
           const status = STATUS_META[service.isOpen ? 'open' : 'closed']
@@ -91,7 +91,7 @@ function ServicePicker() {
             <li key={service.id}>
               <Link
                 to={`/admin/queues/${service.id}`}
-                className="block rounded-sm border border-line/80 bg-surface/92 px-5 py-4 shadow-card backdrop-blur-md transition-colors hover:border-line-strong hover:bg-surface"
+                className="block rounded-sm border border-line/80 bg-surface/97 px-5 py-4 shadow-card backdrop-blur-md transition-colors hover:border-line-strong hover:bg-surface"
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="truncate font-semibold text-ink">{service.name}</span>
@@ -208,7 +208,7 @@ function ServiceQueue({ service }) {
         ) : (
           <>
             {/* Narrow screens: one stacked card per person. */}
-            <ol aria-label="People in line, front first" className="focus-list divide-y divide-line md:hidden">
+            <ol aria-label="People in line, front first" className="divide-y divide-line md:hidden">
               {line.map((entry, index) => (
                 <QueueCard key={entry.id} {...rowProps(entry, index)} />
               ))}
@@ -227,7 +227,7 @@ function ServiceQueue({ service }) {
                 <span>Est. wait</span>
                 <span className="text-right">Actions</span>
               </div>
-              <ol aria-label="People in line, front first" className="focus-list divide-y divide-line">
+              <ol aria-label="People in line, front first" className="divide-y divide-line">
                 {line.map((entry, index) => (
                   <QueueRow key={entry.id} {...rowProps(entry, index)} />
                 ))}
@@ -287,7 +287,7 @@ function ServiceQueue({ service }) {
 
 function QueueRow({ entry, wait, ...actions }) {
   return (
-    <li className={`${COLUMNS} px-5 py-3`}>
+    <li className={`${COLUMNS} px-5 py-3 transition-colors hover:bg-sunken`}>
       <span className="font-semibold text-ink-muted tabular-nums">
         <span className="sr-only">Place </span>
         {entry.position}
@@ -312,7 +312,7 @@ function QueueRow({ entry, wait, ...actions }) {
 
 function QueueCard({ entry, wait, ...actions }) {
   return (
-    <li className="px-4 py-4">
+    <li className="px-4 py-4 transition-colors hover:bg-sunken">
       <div className="flex items-center gap-2.5">
         <span className="w-5 shrink-0 font-semibold text-ink-muted tabular-nums">
           <span className="sr-only">Place </span>
@@ -414,7 +414,7 @@ function AboutService({ service, onToggleOpen }) {
     [
       'Queue',
       <span key="queue" className="inline-flex items-center gap-2">
-        <StatusDot size="size-2" className={service.isOpen ? 'bg-emerald-600' : 'bg-red-600'} pulse={service.isOpen} />
+        <StatusDot className={service.isOpen ? 'bg-emerald-600' : 'bg-red-600'} pulse={service.isOpen} />
         {service.isOpen ? 'Open' : 'Closed'}
       </span>,
     ],

@@ -121,7 +121,7 @@ function ServiceList({ services, editingId, onEdit }) {
       {services.length === 0 ? (
         <EmptyState icon={Settings2} title="No services yet" description="Use the form to add the first one." />
       ) : (
-        <ul className="focus-list divide-y divide-line">
+        <ul className="divide-y divide-line">
           {services.map((service) => {
             const selected = service.id === editingId
             const status = STATUS_META[service.isOpen ? 'open' : 'closed']
@@ -129,7 +129,9 @@ function ServiceList({ services, editingId, onEdit }) {
               <li
                 key={service.id}
                 aria-current={selected || undefined}
-                className={`relative flex items-center gap-3 py-3 pr-3 pl-5 ${selected ? 'bg-accent-soft' : ''}`}
+                className={`relative flex items-center gap-3 py-3 pr-3 pl-5 transition-colors ${
+                  selected ? 'bg-accent-soft' : 'hover:bg-sunken'
+                }`}
               >
                 {selected && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] bg-accent" />}
                 <div className="min-w-0 flex-1">

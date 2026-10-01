@@ -278,7 +278,7 @@ function ServiceDetails({ service, lineLength }) {
     [
       'Queue',
       <span key="queue" className="inline-flex items-center gap-2">
-        <StatusDot size="size-2" className={service.isOpen ? 'bg-emerald-600' : 'bg-red-600'} pulse={service.isOpen} />
+        <StatusDot className={service.isOpen ? 'bg-emerald-600' : 'bg-red-600'} pulse={service.isOpen} />
         {service.isOpen ? 'Open' : 'Closed'}
       </span>,
     ],
