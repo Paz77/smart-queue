@@ -1,4 +1,4 @@
-import { ArrowRight, Bell, Check, ListPlus, Lock, Timer } from 'lucide-react'
+import { ArrowRight, Bell, Check, History as HistoryIcon, ListPlus, Lock, Timer } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../components/Button'
@@ -9,7 +9,8 @@ import { useAuth } from '../../context/auth'
 import { useNotifications } from '../../context/notifications'
 import { useOrganization } from '../../context/organization'
 import { useQueue } from '../../context/queue'
-import { estimateWait, formatRelative, formatTime, formatWait, ordinal } from '../../utils/format'
+import { estimateWait, formatRelative, formatTime, formatWait, minutesBetween, ordinal } from '../../utils/format'
+import { STATUS_META } from '../../utils/status'
 
 const STATUS_HINT = {
   waiting: 'We will notify you as you move up in the line.',
@@ -44,6 +45,7 @@ export default function Dashboard() {
         <CurrentQueue />
         <ActiveServices />
         <UpdatesTimeline />
+        <VisitStats />
       </div>
     </>
   )
@@ -394,6 +396,139 @@ function TimelineItem({ notification, now, isLast, onRead }) {
       </Row>
     </li>
   )
+}
+
+const shortDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
+const OUTCOMES = ['served', 'left', 'no_show']
+//Served uses the organization's own color; the two ways a visit can end early are greys
+const OUTCOME_COLOR = {
+  served: 'bg-accent',
+  left: 'bg-stone-400',
+  no_show: 'bg-stone-600',
+}
+
+//Stats from every line you have been in here: how your visits ended, plus a few quick facts
+function VisitStats() {
+  const { history, getService } = useQueue()
+  const summary = summarizeHistory(history, getService)
+  const { visits, firstVisit } = summary
+
+  return (
+    <section aria-labelledby="visits-heading">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="visits-heading" className="text-xl font-semibold tracking-tight text-ink">
+          Your visits
+        </h2>
+        {visits.length > 0 && (
+          <p className="text-xl text-ink tabular-nums">
+            {visits.length} since {shortDate.format(new Date(firstVisit))}
+            {' · '}
+            <Link to="/app/history" className="font-medium text-accent hover:underline">
+              See history
+            </Link>
+          </p>
+        )}
+      </div>
+
+      {visits.length === 0 ? (
+        <QuietCard icon={HistoryIcon} text="No visits yet. Lines you join will show up here after you're served or leave." />
+      ) : (
+        <OutcomeSplit summary={summary} />
+      )}
+    </section>
+  )
+}
+
+//One bar split by how your visits ended, then a few plain facts
+function OutcomeSplit({ summary }) {
+  const { visits, counts, averageWait, byService } = summary
+  const outcomes = OUTCOMES.filter((outcome) => counts[outcome] > 0)
+
+  const timed = byService.filter((service) => service.usualWait !== null).sort((a, b) => a.usualWait - b.usualWait)
+  const quickest = timed[0]
+  const slowest = timed.length > 1 ? timed[timed.length - 1] : null
+  //Only call one service your most visited when it clearly is
+  const [top, runnerUp] = byService
+  const mostVisited = top && top.visits.length > 1 && top.visits.length > (runnerUp?.visits.length ?? 0) ? top : null
+  const last = visits[visits.length - 1]
+
+  const facts = [
+    quickest && { label: 'Quickest', value: `${quickest.name}, about ${formatWait(quickest.usualWait)}` },
+    slowest && { label: 'Slowest', value: `${slowest.name}, about ${formatWait(slowest.usualWait)}` },
+    mostVisited && { label: 'Most visited', value: `${mostVisited.name}, ${plural(mostVisited.visits.length, 'time')}` },
+    averageWait !== null && { label: 'Usual wait', value: `About ${formatWait(averageWait)} when served` },
+    { label: 'Last visit', value: `${last.serviceName}, ${shortDate.format(new Date(last.joinedAt))}` },
+  ].filter(Boolean)
+
+  return (
+    <Card className="px-6 py-5">
+      <div
+        role="img"
+        aria-label={outcomes.map((outcome) => `${counts[outcome]} ${STATUS_META[outcome].label}`).join(', ')}
+        className="flex h-3 gap-0.5 overflow-hidden rounded-full"
+      >
+        {outcomes.map((outcome) => (
+          <span key={outcome} className={`basis-0 ${OUTCOME_COLOR[outcome]}`} style={{ flexGrow: counts[outcome] }} />
+        ))}
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted">
+        {OUTCOMES.map((outcome) => (
+          <li key={outcome} className="flex items-center gap-1.5">
+            <span aria-hidden="true" className={`size-2 rounded-full ${OUTCOME_COLOR[outcome]}`} />
+            {STATUS_META[outcome].label}
+            <span className="font-medium text-ink tabular-nums">{counts[outcome]}</span>
+          </li>
+        ))}
+      </ul>
+
+      <dl className="mt-5 space-y-2 border-t border-line pt-4">
+        {facts.map((fact) => (
+          <div key={fact.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 text-sm">
+            <dt className="text-ink-subtle">{fact.label}</dt>
+            <dd className="text-ink">{fact.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
+  )
+}
+
+//Your visits oldest first, how they ended, your average wait, and a breakdown per service
+function summarizeHistory(history, getService) {
+  const visits = history
+    .map((visit) => ({
+      ...visit,
+      serviceName: getService(visit.serviceId)?.name ?? 'Unknown service',
+      wait: visit.outcome === 'served' && visit.servedAt ? minutesBetween(visit.joinedAt, visit.servedAt) : null,
+    }))
+    .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt))
+  const served = visits.filter((visit) => visit.wait !== null)
+
+  const counts = { served: 0, left: 0, no_show: 0 }
+  visits.forEach((visit) => {
+    counts[visit.outcome] = (counts[visit.outcome] ?? 0) + 1
+  })
+
+  const groups = new Map()
+  visits.forEach((visit) => {
+    if (!groups.has(visit.serviceId)) groups.set(visit.serviceId, { id: visit.serviceId, name: visit.serviceName, visits: [] })
+    groups.get(visit.serviceId).visits.push(visit)
+  })
+  //Most visited first, and the one you went to most recently when that is a tie
+  const byService = [...groups.values()]
+    .map((group) => ({ ...group, usualWait: averageOf(group.visits.filter((visit) => visit.wait !== null)) }))
+    .sort((a, b) => b.visits.length - a.visits.length || new Date(b.visits.at(-1).joinedAt) - new Date(a.visits.at(-1).joinedAt))
+
+  return { visits, counts, averageWait: averageOf(served), byService, firstVisit: visits[0]?.joinedAt }
+}
+
+function averageOf(timedVisits) {
+  if (timedVisits.length === 0) return null
+  return Math.round(timedVisits.reduce((sum, visit) => sum + visit.wait, 0) / timedVisits.length)
+}
+
+function plural(count, word) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`
 }
 
 function peopleAhead(count) {
