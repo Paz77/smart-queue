@@ -6,6 +6,7 @@ import QueueManagement from './pages/admin/QueueManagement'
 import ServiceManagement from './pages/admin/ServiceManagement'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
+import Dashboard from './pages/user/Dashboard'
 import History from './pages/user/History'
 import QueueStatus from './pages/user/QueueStatus'
 
@@ -18,7 +19,7 @@ export default function App() {
 
       <Route path="/app" element={<Layout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<Placeholder title="Dashboard" />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="join" element={<Placeholder title="Join a queue" />} />
         <Route path="status" element={<QueueStatus />} />
         <Route path="history" element={<History />} />
