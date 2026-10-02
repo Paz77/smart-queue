@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ListPlus, Timer } from 'lucide-react'
+import { ArrowRight, Check, ListPlus, Lock, Timer } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../components/Button'
@@ -39,7 +39,10 @@ export default function Dashboard() {
         description="Where you are in line, what you can join, and your latest updates."
       />
 
-      <CurrentQueue />
+      <div className="space-y-6">
+        <CurrentQueue />
+        <ActiveServices />
+      </div>
     </>
   )
 }
@@ -117,6 +120,182 @@ function CurrentQueue() {
         </Button>
       </div>
     </Card>
+  )
+}
+
+const METER_SLOTS = 8
+
+//Every service here: open ones from shortest to longest wait, then closed ones
+function ActiveServices() {
+  const { services, entriesFor, myEntry } = useQueue()
+  const { organization } = useOrganization()
+
+  const inLine = Boolean(myEntry) && myEntry.status !== 'served'
+  const people = organization.personPlural?.toLowerCase() ?? 'people'
+
+  const rows = services.map((service) => {
+    const waiting = entriesFor(service.id).length
+    const isMine = inLine && myEntry.serviceId === service.id
+    return {
+      ...service,
+      waiting,
+      isMine,
+      position: isMine ? myEntry.position : null,
+      //Your own wait if you are in this line, otherwise the wait if you joined now
+      wait: estimateWait(isMine ? myEntry.position : waiting + 1, service.expectedDuration),
+      to: isMine ? '/app/status' : `/app/join?service=${service.id}`,
+      //You can only be in one line at a time, so other lines are just for looking
+      action: isMine ? 'View status' : inLine ? 'See wait' : 'Join',
+    }
+  })
+
+  const open = rows.filter((service) => service.isOpen).sort((a, b) => a.wait - b.wait)
+  const closed = rows.filter((service) => !service.isOpen)
+  const shortestId = open.find((service) => !service.isMine)?.id
+
+  return (
+    <section aria-labelledby="services-heading">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="services-heading" className="text-sm font-semibold text-ink">
+          Services
+        </h2>
+        <p className="text-xs text-ink-muted tabular-nums">
+          {open.length} of {rows.length} open to new {people}
+        </p>
+      </div>
+
+      {rows.length === 0 ? (
+        <QuietCard text="No services have been added here yet. Check back soon." />
+      ) : (
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {open.map((service) => (
+            <li key={service.id}>
+              <OpenTile service={service} isShortest={service.id === shortestId} />
+            </li>
+          ))}
+          {closed.map((service) => (
+            <li key={service.id}>
+              <ClosedTile service={service} people={people} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function QuietCard({ text }) {
+  return (
+    <Card className="flex items-center gap-4 px-6 py-4">
+      <div className="grid size-9 shrink-0 place-items-center rounded-sm border border-line bg-sunken text-ink-muted">
+        <Timer className="size-4.5" strokeWidth={1.75} />
+      </div>
+      <p className="text-sm text-ink-muted">{text}</p>
+    </Card>
+  )
+}
+
+//One small square per person in line, so a busy line looks busy at a glance
+function LineMeter({ waiting, label, muted = false }) {
+  return (
+    <div className="mt-3 flex items-center gap-2.5">
+      <span aria-hidden="true" className="flex gap-[3px]">
+        {Array.from({ length: METER_SLOTS }, (_, slot) => (
+          <span
+            key={slot}
+            className={`size-2 rounded-xs ${slot < waiting ? (muted ? 'bg-ink-subtle' : 'bg-accent') : 'bg-line'}`}
+          />
+        ))}
+      </span>
+      <span className="text-xs text-ink-muted tabular-nums">{label}</span>
+    </div>
+  )
+}
+
+//An open service: the whole card is a link to join it (or to your status if you're already in it)
+function OpenTile({ service, isShortest }) {
+  return (
+    <Card className="group relative flex h-full flex-col px-5 py-4 transition-colors hover:border-line-strong">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-medium text-ink">
+          {/* The link stretches over the whole card so the card is one big click target */}
+          <Link to={service.to} className="after:absolute after:inset-0">
+            {service.name}
+          </Link>
+        </h3>
+        {service.isMine && (
+          <span className="shrink-0 rounded-sm border border-accent/20 bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent">
+            You're in this line
+          </span>
+        )}
+        {isShortest && (
+          <span className="shrink-0 rounded-sm border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800">
+            Shortest wait
+          </span>
+        )}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{service.description}</p>
+
+      <p className="mt-3 text-2xl font-semibold tracking-tight text-ink tabular-nums">
+        {service.isMine ? ordinal(service.position) : `~${formatWait(service.wait)}`}
+        <span className="ml-1.5 text-sm font-normal tracking-normal text-ink-muted">
+          {service.isMine ? 'in line' : 'if you join now'}
+        </span>
+      </p>
+      <LineMeter waiting={service.waiting} label={service.waiting === 0 ? 'No one in line' : `${service.waiting} in line`} />
+
+      <div className="mt-4 flex flex-1 items-end justify-between gap-3 border-t border-line pt-3 text-xs">
+        <span className="text-ink-subtle tabular-nums">About {service.expectedDuration} min per person</span>
+        <span className="inline-flex items-center gap-1 font-medium text-accent">
+          {service.action}
+          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+        </span>
+      </div>
+    </Card>
+  )
+}
+
+//A closed service: flat, dashed and faded, and not a link because no one new can join
+//(unless you were already in the line when it closed, then it links to your status)
+function ClosedTile({ service, people }) {
+  const stillWaiting = service.waiting === 0 ? 'No one in line' : `${service.waiting} still in line`
+
+  return (
+    <div className="group relative flex h-full flex-col rounded-sm border border-dashed border-line-strong bg-canvas/60 px-5 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-medium text-ink-muted">
+          {service.isMine ? (
+            <Link to={service.to} className="after:absolute after:inset-0">
+              {service.name}
+            </Link>
+          ) : (
+            service.name
+          )}
+        </h3>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-line-strong bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-ink-muted">
+          <Lock aria-hidden="true" className="size-3" strokeWidth={2} />
+          Closed
+        </span>
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-ink-subtle">{service.description}</p>
+
+      <p className="mt-3 text-base font-medium text-ink-muted">
+        {service.isMine ? `You keep your place: ${ordinal(service.position)} in line` : `Not taking new ${people} right now`}
+      </p>
+      <LineMeter waiting={service.waiting} label={stillWaiting} muted />
+
+      <div className="mt-4 flex flex-1 items-end justify-between gap-3 border-t border-dashed border-line-strong pt-3 text-xs">
+        <span className="text-ink-subtle tabular-nums">About {service.expectedDuration} min per person</span>
+        {service.isMine ? (
+          <span className="inline-flex items-center gap-1 font-medium text-accent">
+            View status
+            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        ) : (
+          <span className="text-ink-subtle">Can't join right now</span>
+        )}
+      </div>
+    </div>
   )
 }
 
