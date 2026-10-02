@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ListPlus, Lock, Timer } from 'lucide-react'
+import { ArrowRight, Bell, Check, ListPlus, Lock, Timer } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../components/Button'
@@ -6,9 +6,10 @@ import { Card } from '../../components/Card'
 import { PageHeader } from '../../components/PageHeader'
 import { StatusBadge } from '../../components/StatusBadge'
 import { useAuth } from '../../context/auth'
+import { useNotifications } from '../../context/notifications'
 import { useOrganization } from '../../context/organization'
 import { useQueue } from '../../context/queue'
-import { estimateWait, formatTime, formatWait, ordinal } from '../../utils/format'
+import { estimateWait, formatRelative, formatTime, formatWait, ordinal } from '../../utils/format'
 
 const STATUS_HINT = {
   waiting: 'We will notify you as you move up in the line.',
@@ -42,6 +43,7 @@ export default function Dashboard() {
       <div className="space-y-6">
         <CurrentQueue />
         <ActiveServices />
+        <UpdatesTimeline />
       </div>
     </>
   )
@@ -156,10 +158,10 @@ function ActiveServices() {
   return (
     <section aria-labelledby="services-heading">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="services-heading" className="text-sm font-semibold text-ink">
+        <h2 id="services-heading" className="text-xl font-semibold tracking-tight text-ink">
           Services
         </h2>
-        <p className="text-xs text-ink-muted tabular-nums">
+        <p className="text-xl text-ink tabular-nums">
           {open.length} of {rows.length} open to new {people}
         </p>
       </div>
@@ -184,11 +186,11 @@ function ActiveServices() {
   )
 }
 
-function QuietCard({ text }) {
+function QuietCard({ text, icon: Icon = Timer }) {
   return (
     <Card className="flex items-center gap-4 px-6 py-4">
       <div className="grid size-9 shrink-0 place-items-center rounded-sm border border-line bg-sunken text-ink-muted">
-        <Timer className="size-4.5" strokeWidth={1.75} />
+        <Icon className="size-4.5" strokeWidth={1.75} />
       </div>
       <p className="text-sm text-ink-muted">{text}</p>
     </Card>
@@ -296,6 +298,101 @@ function ClosedTile({ service, people }) {
         )}
       </div>
     </div>
+  )
+}
+
+const TIMELINE_LIMIT = 4
+
+//The latest updates on a line, newest first, split into today and earlier
+function UpdatesTimeline() {
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications()
+  const now = useNow()
+
+  const latest = notifications.slice(0, TIMELINE_LIMIT)
+  const today = new Date(now).toDateString()
+  const isToday = (notification) => new Date(notification.createdAt).toDateString() === today
+  const groups = [
+    { label: 'Today', items: latest.filter(isToday) },
+    { label: 'Earlier', items: latest.filter((notification) => !isToday(notification)) },
+  ].filter((group) => group.items.length > 0)
+  const older = notifications.length - latest.length
+
+  return (
+    <section aria-labelledby="updates-heading">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="updates-heading" className="text-xl font-semibold tracking-tight text-ink">
+          Updates
+        </h2>
+        <p className="text-xl text-ink tabular-nums">
+          {unreadCount ? `${unreadCount} unread` : 'All caught up'}
+          {unreadCount > 0 && (
+            <>
+              {' · '}
+              <button type="button" onClick={markAllRead} className="font-medium text-accent hover:underline">
+                Mark all as read
+              </button>
+            </>
+          )}
+        </p>
+      </div>
+
+      {latest.length === 0 ? (
+        <QuietCard icon={Bell} text="No updates yet. We'll post here when your place in line changes." />
+      ) : (
+        <Card className="px-6 py-5">
+          {groups.map((group) => (
+            <div key={group.label} className="mt-5 first:mt-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">{group.label}</p>
+              <ol className="mt-3">
+                {group.items.map((notification, index) => (
+                  <TimelineItem
+                    key={notification.id}
+                    notification={notification}
+                    now={now}
+                    isLast={index === group.items.length - 1}
+                    onRead={markRead}
+                  />
+                ))}
+              </ol>
+            </div>
+          ))}
+          {older > 0 && (
+            <p className="mt-5 border-t border-line pt-3 text-xs text-ink-muted">
+              {older} older {older === 1 ? 'update' : 'updates'} in the bell at the top of the page
+            </p>
+          )}
+        </Card>
+      )}
+    </section>
+  )
+}
+
+//One stop on the line: a filled dot while unread, clicking it marks it read
+function TimelineItem({ notification, now, isLast, onRead }) {
+  const unread = !notification.read
+  const Row = unread ? 'button' : 'div'
+
+  return (
+    <li className={`relative pl-6 ${isLast ? '' : 'pb-4'}`}>
+      {!isLast && <span aria-hidden="true" className="absolute top-4 -bottom-1.5 left-[4.5px] w-px bg-line" />}
+      <span
+        aria-hidden="true"
+        className={`absolute top-1.5 left-0 size-2.5 rounded-full ${unread ? 'bg-accent' : 'border-2 border-line-strong bg-surface'}`}
+      />
+      <Row
+        {...(unread && { type: 'button', title: 'Mark as read', onClick: () => onRead(notification.id) })}
+        className="block w-full text-left"
+      >
+        {unread && <span className="sr-only">Unread: </span>}
+        <span className="flex items-baseline justify-between gap-3">
+          <span className={`text-sm ${unread ? 'font-medium text-ink' : 'text-ink-muted'}`}>{notification.title}</span>
+          <span className="shrink-0 text-[11px] text-ink-subtle tabular-nums">
+            {formatRelative(notification.createdAt, now)}
+          </span>
+        </span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">{notification.message}</span>
+      </Row>
+    </li>
   )
 }
 
