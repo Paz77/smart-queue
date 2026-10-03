@@ -1,8 +1,10 @@
-import { ArrowRight, Check, ListPlus, Lock } from 'lucide-react'
+import { ArrowRight, Check, ListPlus, ListX, Lock, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { EmptyState } from '../../components/EmptyState'
+import { Modal } from '../../components/Modal'
 import { PageHeader } from '../../components/PageHeader'
 import { useOrganization } from '../../context/organization'
 import { useQueue } from '../../context/queue'
@@ -27,10 +29,11 @@ function turnAround(now, minutes) {
 }
 
 export default function JoinQueue() {
-  const { services, entriesFor, myEntry, joinQueue } = useQueue()
+  const { services, entriesFor, myEntry, joinQueue, leaveQueue } = useQueue()
   const { organization } = useOrganization()
   const [searchParams, setSearchParams] = useSearchParams()
   const [error, setError] = useState('')
+  const [leaving, setLeaving] = useState(false)
   const now = useNow()
 
   const people = organization.personPlural?.toLowerCase() ?? 'people'
@@ -51,9 +54,9 @@ export default function JoinQueue() {
     ...all.filter((service) => !service.isOpen),
   ]
 
-  //?service=<id> picks a service, so the dashboard tiles can link straight to it
-  const selected = rows.find((service) => service.id === searchParams.get('service')) ?? null
   const mine = rows.find((service) => service.isMine) ?? null
+  //?service=<id> picks a service, so the dashboard tiles can link straight to it; otherwise your own line is shown
+  const selected = rows.find((service) => service.id === searchParams.get('service')) ?? mine
   //You can only hold one place at a time, and closed lines take no one new
   const canJoin = Boolean(selected?.isOpen) && !activeEntry
   const join = { selected, mine, canJoin, error, people }
@@ -61,6 +64,13 @@ export default function JoinQueue() {
   function pick(serviceId) {
     setSearchParams({ service: serviceId }, { replace: true })
     setError('')
+  }
+
+  //Give up your place; if no other line is picked, keep this one picked so joining again is one click
+  function confirmLeave() {
+    setLeaving(false)
+    if (!searchParams.get('service')) setSearchParams({ service: mine.id }, { replace: true })
+    leaveQueue()
   }
 
   function handleSubmit(event) {
@@ -82,17 +92,66 @@ export default function JoinQueue() {
         description="Pick a service to see how long you would wait, then take your place in line."
       />
 
-      <div aria-live="polite">{mine && <InLineCard service={mine} />}</div>
+      <div aria-live="polite">{mine && <InLineCard service={mine} onLeave={() => setLeaving(true)} />}</div>
 
-      <form noValidate onSubmit={handleSubmit}>
-        <WaitComparison rows={rows} selected={selected} onPick={pick} join={join} />
-      </form>
+      {rows.length === 0 ? (
+        <NoServices organizationName={organization.name} />
+      ) : (
+        <form noValidate onSubmit={handleSubmit}>
+          <WaitComparison rows={rows} selected={selected} onPick={pick} join={join} />
+        </form>
+      )}
+
+      {mine && (
+        <LeaveConfirm service={mine} open={leaving} onStay={() => setLeaving(false)} onLeave={confirmLeave} />
+      )}
     </>
   )
 }
 
+//Shown in place of the bars when the organization has no services yet
+function NoServices({ organizationName }) {
+  return (
+    <Card>
+      <EmptyState
+        icon={ListX}
+        title="No services to join yet"
+        description={`${organizationName} hasn't opened any lines. Check back soon.`}
+        action={
+          <Button variant="secondary" as={Link} to="/app/dashboard">
+            Back to dashboard
+          </Button>
+        }
+      />
+    </Card>
+  )
+}
+
+//The "are you sure?" box before giving up your place
+function LeaveConfirm({ service, open, onStay, onLeave }) {
+  return (
+    <Modal
+      open={open}
+      onClose={onStay}
+      title={`Leave ${service.name}?`}
+      description={`You're ${ordinal(service.spot)} in line. If you leave, everyone behind you moves up, and joining again puts you at the back of the line.`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onStay}>
+            Keep my place
+          </Button>
+          <Button variant="danger-solid" onClick={onLeave}>
+            <LogOut />
+            Leave line
+          </Button>
+        </>
+      }
+    />
+  )
+}
+
 //Shown once you hold a place in a line, since you can only be in one at a time
-function InLineCard({ service }) {
+function InLineCard({ service, onLeave }) {
   return (
     <Card className="mb-6 flex flex-wrap items-center gap-4 px-6 py-4">
       <div className="grid size-9 shrink-0 place-items-center rounded-sm border border-accent/20 bg-accent-soft text-accent">
@@ -104,10 +163,16 @@ function InLineCard({ service }) {
           {ordinal(service.spot)} in line · about {formatWait(service.wait)} left · your turn around ~{service.turnAt}
         </p>
       </div>
-      <Button variant="secondary" size="sm" as={Link} to="/app/status" className="w-full sm:w-auto">
-        View queue status
-        <ArrowRight />
-      </Button>
+      <div className="flex w-full gap-2 sm:w-auto">
+        <Button variant="danger" size="sm" onClick={onLeave} className="flex-1 sm:flex-none">
+          <LogOut />
+          Leave line
+        </Button>
+        <Button variant="secondary" size="sm" as={Link} to="/app/status" className="flex-1 sm:flex-none">
+          View queue status
+          <ArrowRight />
+        </Button>
+      </div>
     </Card>
   )
 }
@@ -116,12 +181,15 @@ function InLineCard({ service }) {
 function WaitComparison({ rows, selected, onPick, join }) {
   const longest = Math.max(1, ...rows.filter((service) => service.isOpen).map((service) => service.wait))
   const showWait = selected && (selected.isOpen || selected.isMine)
+  const allClosed = rows.every((service) => !service.isOpen)
 
   return (
     <>
       <Card className="p-3">
         <p className="px-3 pt-1 pb-3 text-xs text-ink-muted">
-          Choose Service to join its queue. Each bar is the estimated wait time if you joined now.
+          {allClosed
+            ? 'All lines are closed right now, so no one new can join. Check back soon.'
+            : 'Choose Service to join its queue. Each bar is the estimated wait time if you joined now.'}
         </p>
         <ul className="divide-y divide-line-strong">
           {rows.map((service) => (
@@ -249,17 +317,22 @@ function ClosedNote({ service, people }) {
 //The note and Join button at the bottom of the card
 function JoinBar({ join, className = '' }) {
   const { selected, mine, canJoin, error } = join
+  const inThisLine = Boolean(selected?.isMine)
 
   let note = 'You can leave the line at any time.'
-  if (mine) {
-    note = selected?.isMine
-      ? 'This is your line. Your place is saved.'
-      : `You can hold one place at a time, and you're already in line for ${mine.name}.`
+  if (inThisLine) {
+    note = 'This is your line. Your place is saved. Use Leave line at the top to give it up.'
   } else if (!selected) {
     note = 'Pick a service to see your wait.'
   } else if (!selected.isOpen) {
     note = `${selected.name} is closed, so no one new can join right now.`
+  } else if (mine) {
+    note = `You can only hold one place at a time. Leave ${mine.name} first to join ${selected.name}.`
   }
+
+  let label = 'Join line'
+  if (inThisLine) label = 'Already in this line'
+  else if (canJoin) label = `Join ${selected.name}`
 
   return (
     <div className={className}>
@@ -271,8 +344,8 @@ function JoinBar({ join, className = '' }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="min-w-48 flex-1 text-xs leading-relaxed text-ink-muted">{note}</p>
         <Button type="submit" disabled={!canJoin} className="w-full sm:w-auto">
-          <ListPlus />
-          {canJoin ? `Join ${selected.name}` : 'Join line'}
+          {inThisLine ? <Check /> : <ListPlus />}
+          {label}
         </Button>
       </div>
     </div>
