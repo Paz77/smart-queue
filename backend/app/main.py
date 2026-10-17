@@ -1,11 +1,12 @@
 """The FastAPI app.
 
-Run from backend/:  uvicorn app.main:app --reload --port 8000
+Run from backend/:  python -m app.main
 API docs:           http://localhost:8000/docs
 """
 
 from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI
 from sqlmodel import Session
 
@@ -29,4 +30,8 @@ register_error_handlers(app)
 # Each module's router goes here, under /api. For example:
 #     from app.routes import auth
 #     app.include_router(auth.router, prefix="/api")
-# Dev-only routers go inside `if IS_DEV:` (from app.config).
+
+
+if __name__ == "__main__":
+    # reload=True restarts the server whenever a file is saved.
+    uvicorn.run("app.main:app", reload=True, port=8000)
