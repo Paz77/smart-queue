@@ -36,11 +36,11 @@ On Windows, activate with `.venv\Scripts\activate` instead.
 From `backend/`, with the virtual environment active (`source .venv/bin/activate` in each new terminal):
 
 ```sh
-uvicorn app.main:app --reload --port 8000
+python -m app.main
 ```
 
 - Interactive API docs: http://localhost:8000/docs
-- `--reload` restarts the server when you save a file.
+- The server restarts automatically when you save a file.
 - Data lives in memory: it's seeded from `app/seed.py` on startup and resets every time the server restarts.
 
 ### Sample accounts
@@ -58,14 +58,19 @@ All other visitors in `app/seed.py` also use `password123`.
 From `backend/`:
 
 ```sh
-pytest --cov=app --cov-report=term-missing
+python -m pytest
+```
+
+With a coverage report:
+
+```sh
+python -m pytest --cov=app --cov-report=term-missing
 ```
 
 ### Settings
 
-Set these as environment variables before starting the server. Neither is needed for local development.
+Optional. Set as an environment variable before starting the server.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `QUEUESMART_ENV` | `dev` | `prod` turns off the dev-only endpoints |
 | `DATABASE_URL` | `sqlite://` | In-memory database. A file like `sqlite:///queuesmart.db` keeps data between restarts |
