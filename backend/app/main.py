@@ -30,6 +30,11 @@ register_error_handlers(app)
 # Each module's router goes here, under /api. For example:
 #     from app.routes import auth
 #     app.include_router(auth.router, prefix="/api")
+#
+# The dev router only goes in when IS_DEV is on (see config.py):
+#     from app.config import IS_DEV
+#     if IS_DEV:
+#         app.include_router(dev.router, prefix="/api")
 
 
 if __name__ == "__main__":
