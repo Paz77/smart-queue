@@ -28,8 +28,6 @@ def issue_token(session: Session, user: User) -> AuthToken:
     """Start a new login session for the user."""
     auth_token = AuthToken(token=secrets.token_urlsafe(32), user_id=user.id)
     session.add(auth_token)
-    session.commit()
-    session.refresh(auth_token)
     return auth_token
 
 
@@ -41,8 +39,6 @@ def register(session: Session, name: str, email: str, password: str) -> tuple[Us
 
     user = User(name=name, email=email, password_hash=hash_password(password))
     session.add(user)
-    session.commit()
-    session.refresh(user)
     return user, issue_token(session, user)
 
 
@@ -59,4 +55,3 @@ def log_out(session: Session, token: str) -> None:
     auth_token = session.get(AuthToken, token)
     if auth_token is not None:
         session.delete(auth_token)
-        session.commit()

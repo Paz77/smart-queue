@@ -44,12 +44,14 @@ def auth_out(user: User, token: str) -> AuthOut:
 @router.post("/register", status_code=201, response_model=AuthOut)
 def register(body: RegisterIn, session: Session = Depends(get_session)):
     user, auth_token = auth.register(session, body.name, body.email, body.password)
+    session.commit()
     return auth_out(user, auth_token.token)
 
 
 @router.post("/login", response_model=AuthOut)
 def login(body: LoginIn, session: Session = Depends(get_session)):
     user, auth_token = auth.log_in(session, body.email, body.password)
+    session.commit()
     return auth_out(user, auth_token.token)
 
 
@@ -65,3 +67,4 @@ def logout(
     session: Session = Depends(get_session),
 ) -> None:
     auth.log_out(session, credentials.credentials)
+    session.commit()

@@ -289,3 +289,26 @@ def test_logout_preserves_account_and_allows_login(client, session, credentials)
     logged_in = assert_auth_response(client.post("/api/auth/login", json=credentials), session, 200)
     assert logged_in["user"] == body["user"]
     assert_me(client, logged_in["token"], logged_in["user"])
+
+
+# The test client shares this session, so rolling it back drops anything the route didn't commit.
+def test_registration_is_committed(client, session, registration):
+    body = assert_auth_response(client.post("/api/auth/register", json=registration), session, 201)
+    session.rollback()
+    assert session.get(User, body["user"]["id"]) is not None
+    assert session.get(AuthToken, body["token"]) is not None
+
+
+def test_login_token_is_committed(client, session, credentials):
+    body = assert_auth_response(client.post("/api/auth/login", json=credentials), session, 200)
+    session.rollback()
+    assert session.get(AuthToken, body["token"]) is not None
+
+
+def test_logout_is_committed(login_as, session):
+    user_client = login_as("u-1")  # its token is already committed
+    token = user_client.headers["Authorization"].removeprefix("Bearer ")
+    response = user_client.post("/api/auth/logout")
+    assert 200 <= response.status_code < 300, response.text
+    session.rollback()
+    assert session.get(AuthToken, token) is None
