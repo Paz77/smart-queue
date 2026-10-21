@@ -12,6 +12,7 @@ from sqlmodel import Session
 
 from app.db import create_tables, engine
 from app.errors import register_error_handlers
+from app.routes import auth, organizations
 from app.seed import seed
 
 
@@ -26,6 +27,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="QueueSmart API", lifespan=lifespan)
 register_error_handlers(app)
+app.include_router(auth.router, prefix="/api")
+app.include_router(organizations.router, prefix="/api")
 
 # Each module's router goes here, under /api. For example:
 #     from app.routes import auth
