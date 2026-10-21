@@ -1,6 +1,7 @@
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
+from pydantic.alias_generators import to_camel
 from sqlmodel import Field, SQLModel
 
 
@@ -12,11 +13,11 @@ class Organization(SQLModel, table=True):
     backdrop_url: str | None = None
 
 
-class OrganizationPublic(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class OrganizationPublic(SQLModel):
+    model_config = ConfigDict(alias_generator=to_camel, validate_by_name=True)
 
     id: str
     name: str
-    person_singular: str = Field(serialization_alias="personSingular")
-    person_plural: str = Field(serialization_alias="personPlural")
-    backdrop_url: str | None = Field(serialization_alias="backdropUrl")
+    person_singular: str
+    person_plural: str
+    backdrop_url: str | None
