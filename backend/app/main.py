@@ -12,7 +12,7 @@ from sqlmodel import Session
 
 from app.db import create_tables, engine
 from app.errors import register_error_handlers
-from app.routes import auth, organizations
+from app.routes import auth, history, notifications, organizations
 from app.seed import seed
 
 
@@ -29,6 +29,8 @@ app = FastAPI(title="QueueSmart API", lifespan=lifespan)
 register_error_handlers(app)
 app.include_router(auth.router, prefix="/api")
 app.include_router(organizations.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
+app.include_router(history.router, prefix="/api")
 
 # Each module's router goes here, under /api. For example:
 #     from app.routes import auth
