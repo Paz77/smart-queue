@@ -1,52 +1,71 @@
-import { useState } from 'react'
-import { users } from '../mocks/users'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { api, clearToken, getToken, setToken } from '../api/client'
 import { AuthContext } from './auth'
 
-const normalizeEmail = (email) => email.trim().toLowerCase()
-
-// Starts signed in as the sample visitor until the login screen is connected.
-// Accounts created with register() last until the page reloads.
+// Who is signed in, backed by the API.
+//
+// login/register/signInAs throw an ApiError when the server refuses, so the
+// screens can read err.fields to put messages under the right input. The token
+// is kept in localStorage by the client, so a reload stays signed in.
 export function AuthProvider({ children }) {
-  const [accounts, setAccounts] = useState(users)
-  const [currentUser, setCurrentUser] = useState(users[0])
+  const [currentUser, setCurrentUser] = useState(null)
+  // True until we know whether the stored token still works, so screens do not
+  // flash "logged out" on every reload.
+  const [restoring, setRestoring] = useState(Boolean(getToken()))
 
-  function login(email, password) {
-    const match = accounts.find((user) => user.email === normalizeEmail(email) && user.password === password)
-    if (match) setCurrentUser(match)
-    return match ?? null
-  }
+  useEffect(() => {
+    if (!getToken()) return
 
-  function logout() {
-    setCurrentUser(null)
-  }
+    let cancelled = false
+    api
+      .get('/auth/me')
+      .then((user) => {
+        if (!cancelled) setCurrentUser(user)
+      })
+      .catch(() => {
+        // The token expired or the server restarted and forgot it.
+        clearToken()
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false)
+      })
 
-  function isEmailTaken(email) {
-    return accounts.some((user) => user.email === normalizeEmail(email))
-  }
-
-  // Creates a visitor account and signs in as it. Returns null if the email is already used.
-  function register({ name, email, password }) {
-    if (isEmailTaken(email)) return null
-    const user = {
-      id: `u-${crypto.randomUUID()}`,
-      name: name.trim(),
-      email: normalizeEmail(email),
-      password,
-      role: 'user',
-      organizationId: null,
+    return () => {
+      cancelled = true
     }
-    setAccounts((current) => [...current, user])
+  }, [])
+
+  const signIn = useCallback(async (path, body) => {
+    const { user, token } = await api.post(path, { body })
+    setToken(token)
     setCurrentUser(user)
     return user
-  }
+  }, [])
 
-  // Switch accounts without a password. Used by the developer tools.
-  function signInAs(userId) {
-    const match = accounts.find((user) => user.id === userId)
-    if (match) setCurrentUser(match)
-  }
+  const login = useCallback((email, password) => signIn('/auth/login', { email, password }), [signIn])
 
-  return (
-    <AuthContext value={{ currentUser, login, logout, register, isEmailTaken, signInAs }}>{children}</AuthContext>
+  const register = useCallback(
+    ({ name, email, password }) => signIn('/auth/register', { name, email, password }),
+    [signIn],
   )
+
+  const logout = useCallback(async () => {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // Already invalid server-side; dropping it locally is what matters.
+    }
+    clearToken()
+    setCurrentUser(null)
+  }, [])
+
+  // Switch accounts without a password. Dev only, used by the developer tools.
+  const signInAs = useCallback((userId) => signIn(`/dev/sign-in-as/${userId}`), [signIn])
+
+  const value = useMemo(
+    () => ({ currentUser, restoring, login, logout, register, signInAs }),
+    [currentUser, restoring, login, logout, register, signInAs],
+  )
+
+  return <AuthContext value={value}>{children}</AuthContext>
 }

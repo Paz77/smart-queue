@@ -13,11 +13,12 @@ const FIELDS = ['name', 'email', 'password', 'confirmPassword']
 const EMPTY = { name: '', email: '', password: '', confirmPassword: '' }
 
 export default function Register() {
-  const { register, isEmailTaken } = useAuth()
+  const { register } = useAuth()
   const navigate = useNavigate()
 
   const [values, setValues] = useState(EMPTY)
   const [errors, setErrors] = useState(EMPTY)
+  const [busy, setBusy] = useState(false)
 
   // Checks one field against the whole form, since "confirm password" depends on "password".
   function validate(field, form) {
@@ -26,11 +27,9 @@ export default function Register() {
       case 'name':
         return required(value, 'Name') || maxLength(value, NAME_MAX_LENGTH, 'Name')
       case 'email':
-        return (
-          required(value, 'Email') ||
-          isEmail(value) ||
-          (isEmailTaken(value) ? 'An account with this email already exists.' : '')
-        )
+        // Whether the email is already registered is only knowable server-side,
+        // and comes back as a field error on submit.
+        return required(value, 'Email') || isEmail(value)
       case 'password':
         return required(value, 'Password') || minLength(value, PASSWORD_MIN_LENGTH, 'Password')
       case 'confirmPassword':
@@ -58,18 +57,27 @@ export default function Register() {
     setErrors((current) => ({ ...current, [name]: validate(name, values) }))
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     const nextErrors = Object.fromEntries(FIELDS.map((field) => [field, validate(field, values)]))
     setErrors(nextErrors)
     if (FIELDS.some((field) => nextErrors[field])) return
 
-    const user = register(values)
-    if (!user) {
-      setErrors((current) => ({ ...current, email: 'An account with this email already exists.' }))
-      return
+    setBusy(true)
+    try {
+      await register(values)
+      navigate('/app/dashboard', { replace: true })
+    } catch (cause) {
+      // The API keys its messages to the same field names this form uses, so a
+      // taken email or a rejected password lands under the right input.
+      setErrors((current) => ({
+        ...current,
+        ...cause.fields,
+        ...(Object.keys(cause.fields ?? {}).length === 0 && { email: cause.message }),
+      }))
+    } finally {
+      setBusy(false)
     }
-    navigate('/app/dashboard', { replace: true })
   }
 
   return (
@@ -131,9 +139,9 @@ export default function Register() {
         />
       </div>
 
-      <Button type="submit" className="mt-6 w-full">
+      <Button type="submit" className="mt-6 w-full" disabled={busy}>
         <UserPlus />
-        Create account
+        {busy ? 'Creating account…' : 'Create account'}
       </Button>
     </AuthCard>
   )

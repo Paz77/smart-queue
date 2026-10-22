@@ -10,9 +10,10 @@ import uvicorn
 from fastapi import FastAPI
 from sqlmodel import Session
 
+from app.config import IS_DEV
 from app.db import create_tables, engine
 from app.errors import register_error_handlers
-from app.routes import auth, history, notifications, organizations
+from app.routes import auth, dev, history, notifications, organizations
 from app.seed import seed
 
 
@@ -32,15 +33,9 @@ app.include_router(organizations.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(history.router, prefix="/api")
 
-# Each module's router goes here, under /api. For example:
-#     from app.routes import auth
-#     app.include_router(auth.router, prefix="/api")
-#
-# The dev router only goes in when IS_DEV is on (see config.py):
-#     from app.config import IS_DEV
-#     if IS_DEV:
-#         app.include_router(dev.router, prefix="/api")
-
+# Demo controls, never in a production build.
+if IS_DEV:
+    app.include_router(dev.router, prefix="/api")
 
 if __name__ == "__main__":
     # reload=True restarts the server whenever a file is saved.

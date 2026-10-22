@@ -1,6 +1,7 @@
 import { Wrench, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { api } from '../api/client'
 import { Button } from '../components/Button'
 import { useAuth } from '../context/auth'
 import { useNotifications } from '../context/notifications'
@@ -55,7 +56,7 @@ export function DevTools() {
 function DevPanel({ onClose }) {
   const navigate = useNavigate()
   const isAdminView = useLocation().pathname.startsWith('/admin')
-  const { signInAs } = useAuth()
+  const { currentUser, signInAs } = useAuth()
   const { organizations, organization, personLabel, setOrganizationId } = useOrganization()
   const { myEntry, entriesFor, getService, serveNext, serveEntry, moveEntry, resetOrganization } = useQueue()
   const { resetNotifications } = useNotifications()
@@ -65,14 +66,15 @@ function DevPanel({ onClose }) {
   const line = active ? entriesFor(active.serviceId) : []
   const service = active ? getService(active.serviceId) : null
 
-  function switchOrganization(id) {
+  async function switchOrganization(id) {
     setOrganizationId(id)
-    if (isAdminView) signInAs(adminOf(id).id)
+    // Signing in is a request now, so wait for it before anything reads the user.
+    if (isAdminView) await signInAs(adminOf(id).id)
   }
 
-  function switchView(view) {
+  async function switchView(view) {
     const admin = view === 'admin'
-    signInAs(admin ? adminOf(organization.id).id : SAMPLE_VISITOR_ID)
+    await signInAs(admin ? adminOf(organization.id).id : SAMPLE_VISITOR_ID)
     navigate(admin ? '/admin/dashboard' : '/app/status')
   }
 
@@ -87,9 +89,17 @@ function DevPanel({ onClose }) {
   else if (active) lineSummary = `${ordinal(active.position)} of ${line.length} in ${service.name}.`
   else if (myEntry) lineSummary = 'Called to the desk. Reset the demo data to queue again.'
 
-  function resetDemo() {
+  // Wipes the server's data and loads the sample set again, then pulls the
+  // fresh rows back down. The queue screens still read their own mock state,
+  // so that is reset alongside until they are wired to the API.
+  async function resetDemo() {
+    const signedInAs = currentUser?.id
+    await api.post('/dev/reset')
+    // The reset clears the token table too, so sign back in as the same person
+    // rather than dropping whoever clicked it at the login screen.
+    if (signedInAs) await signInAs(signedInAs)
     resetOrganization(organization.id)
-    resetNotifications(organization.id)
+    await resetNotifications()
   }
 
   return (
