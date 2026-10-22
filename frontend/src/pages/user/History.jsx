@@ -6,7 +6,7 @@ import { Card } from '../../components/Card'
 import { EmptyState } from '../../components/EmptyState'
 import { PageHeader } from '../../components/PageHeader'
 import { StatusBadge } from '../../components/StatusBadge'
-import { useQueue } from '../../context/queue'
+import { useHistory } from '../../context/history'
 import { formatDate, formatTime, formatWait, minutesBetween } from '../../utils/format'
 
 const FILTERS = [
@@ -19,7 +19,7 @@ const FILTERS = [
 const SEARCH_MAX_LENGTH = 100
 
 export default function History() {
-  const { history, getService } = useQueue()
+  const { history, loading } = useHistory()
   const [filter, setFilter] = useState('all')
   const [query, setQuery] = useState('')
 
@@ -30,6 +30,17 @@ export default function History() {
       description="Every queue you have joined, newest first."
     />
   )
+
+  if (loading && history.length === 0) {
+    return (
+      <>
+        {header}
+        <Card>
+          <EmptyState icon={HistoryIcon} title="Loading your visits" description="Fetching them from the server." />
+        </Card>
+      </>
+    )
+  }
 
   if (history.length === 0) {
     return (
@@ -61,7 +72,7 @@ export default function History() {
   const countFor = (value) =>
     value === 'all' ? history.length : history.filter((visit) => visit.outcome === value).length
 
-  const serviceName = (visit) => getService(visit.serviceId)?.name ?? 'Unknown service'
+  const serviceName = (visit) => visit.serviceName ?? 'Unknown service'
   const search = query.trim().toLowerCase()
   const rows = history
     .filter((visit) => filter === 'all' || visit.outcome === filter)

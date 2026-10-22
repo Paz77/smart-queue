@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthProvider'
+import { HistoryProvider } from './context/HistoryProvider'
 import { NotificationProvider } from './context/NotificationProvider'
 import { OrganizationProvider } from './context/OrganizationProvider'
 import { QueueProvider } from './context/QueueProvider'
@@ -14,9 +15,11 @@ createRoot(document.getElementById('root')).render(
       <AuthProvider>
         <OrganizationProvider>
           <NotificationProvider>
-            <QueueProvider>
-              <App />
-            </QueueProvider>
+            <HistoryProvider>
+              <QueueProvider>
+                <App />
+              </QueueProvider>
+            </HistoryProvider>
           </NotificationProvider>
         </OrganizationProvider>
       </AuthProvider>
