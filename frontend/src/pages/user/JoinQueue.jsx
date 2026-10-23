@@ -1,6 +1,7 @@
 import { ArrowRight, Check, ListPlus, ListX, Lock, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useQueueLine } from '../../api/useQueueLine'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { EmptyState } from '../../components/EmptyState'
@@ -38,6 +39,8 @@ export default function JoinQueue() {
   const [leaving, setLeaving] = useState(false)
   //True while a join is on its way to the server, so a double click can't send it twice
   const [joining, setJoining] = useState(false)
+  //The "I need priority assistance" box
+  const [priority, setPriority] = useState(false)
   const now = useNow()
 
   const people = organization.personPlural?.toLowerCase() ?? 'people'
@@ -64,7 +67,7 @@ export default function JoinQueue() {
   const selected = rows.find((service) => service.id === searchParams.get('service')) ?? mine
   //You can only hold one place at a time, and closed lines take no one new
   const canJoin = Boolean(selected?.isOpen) && !activeEntry
-  const join = { selected, mine, canJoin, joining, error, people }
+  const join = { selected, mine, canJoin, joining, error, people, priority, onPriorityChange: setPriority }
 
   function pick(serviceId) {
     setSearchParams({ service: serviceId }, { replace: true })
@@ -93,7 +96,7 @@ export default function JoinQueue() {
     setError('')
     setJoining(true)
     try {
-      await joinQueue(selected.id)
+      await joinQueue(selected.id, priority ? 'priority' : 'normal')
     } catch (failure) {
       //The server's reason, e.g. "Academic Advising is closed right now."
       setError(failure.message)
@@ -110,7 +113,11 @@ export default function JoinQueue() {
         description="Pick a service to see how long you would wait, then take your place in line."
       />
 
-      <div aria-live="polite">{mine && <InLineCard service={mine} onLeave={() => setLeaving(true)} />}</div>
+      <div aria-live="polite">
+        {mine && (
+          <InLineCard service={mine} priority={activeEntry.priority === 'priority'} onLeave={() => setLeaving(true)} />
+        )}
+      </div>
 
       {!loaded ? null : rows.length === 0 ? (
         <NoServices organizationName={organization.name} />
@@ -152,7 +159,7 @@ function LeaveConfirm({ service, open, onStay, onLeave }) {
       open={open}
       onClose={onStay}
       title={`Leave ${service.name}?`}
-      description={`You're ${ordinal(service.spot)} in line. If you leave, everyone behind you moves up, and joining again puts you at the back of the line.`}
+      description={`You're ${ordinal(service.spot)} in line. If you leave, everyone behind you moves up, and you'll get a new place if you join again.`}
       footer={
         <>
           <Button variant="secondary" onClick={onStay}>
@@ -169,7 +176,7 @@ function LeaveConfirm({ service, open, onStay, onLeave }) {
 }
 
 //Shown once you hold a place in a line, since you can only be in one at a time
-function InLineCard({ service, onLeave }) {
+function InLineCard({ service, priority, onLeave }) {
   return (
     <Card className="mb-6 flex flex-wrap items-center gap-4 px-6 py-4">
       <div className="grid size-9 shrink-0 place-items-center rounded-sm border border-accent/20 bg-accent-soft text-accent">
@@ -178,7 +185,8 @@ function InLineCard({ service, onLeave }) {
       <div className="min-w-48 flex-1">
         <h2 className="text-sm font-semibold text-ink">You're in line for {service.name}</h2>
         <p className="mt-0.5 text-xs text-ink-muted tabular-nums">
-          {ordinal(service.spot)} in line · about {formatWait(service.wait)} left · your turn around ~{service.turnAt}
+          {ordinal(service.spot)} in line{priority && ' · priority assistance'} · about {formatWait(service.wait)} left · your
+          turn around ~{service.turnAt}
         </p>
       </div>
       <div className="flex w-full gap-2 sm:w-auto">
@@ -228,7 +236,11 @@ function WaitComparison({ rows, selected, onPick, join }) {
               </div>
               <p className="mt-1 text-xs leading-relaxed text-ink-muted">{selected.description}</p>
               <div className="mt-4">
-                {showWait ? <WaitSummary service={selected} /> : <ClosedNote service={selected} people={join.people} />}
+                {showWait ? (
+                  <WaitSummary key={selected.id} service={selected} priority={join.priority} />
+                ) : (
+                  <ClosedNote service={selected} people={join.people} />
+                )}
               </div>
             </>
           ) : (
@@ -284,20 +296,30 @@ function WaitBar({ service, longest, picked, onPick }) {
 }
 
 //Big wait, your spot, the line of squares and when your turn should come
-function WaitSummary({ service }) {
+function WaitSummary({ service, priority }) {
+  //Where the server says you'd land if you joined now; a priority join can go ahead of people already waiting
+  const { line } = useQueueLine(service.isMine ? null : service.id)
+  const now = useNow()
+  let { spot, wait, turnAt } = service
+  if (line && !service.isMine) {
+    spot = priority ? line.priorityJoinPosition : line.joinPosition
+    wait = priority ? line.priorityJoinWait : line.joinWait
+    turnAt = turnAround(now, wait)
+  }
+
   return (
     <div>
       <p className="text-2xl font-semibold tracking-tight text-ink tabular-nums">
-        ~{formatWait(service.wait)}
+        ~{formatWait(wait)}
         <span className="ml-2 text-base font-normal tracking-normal text-ink-muted">
-          · {service.isMine ? "you're" : "you'd be"} {ordinal(service.spot)} in line
+          · {service.isMine ? "you're" : "you'd be"} {ordinal(spot)} in line
         </span>
       </p>
       <div className="mt-3">
-        <SpotRow ahead={service.spot - 1} />
+        <SpotRow ahead={spot - 1} />
       </div>
       <p className="mt-3 text-xs text-ink-muted tabular-nums">
-        Your turn around <span className="font-medium text-ink">~{service.turnAt}</span> · About{' '}
+        Your turn around <span className="font-medium text-ink">~{turnAt}</span> · About{' '}
         {service.expectedDuration} min per person
       </p>
     </div>
@@ -334,7 +356,7 @@ function ClosedNote({ service, people }) {
 
 //The note and Join button at the bottom of the card
 function JoinBar({ join, className = '' }) {
-  const { selected, mine, canJoin, joining, error } = join
+  const { selected, mine, canJoin, joining, error, priority, onPriorityChange } = join
   const inThisLine = Boolean(selected?.isMine)
 
   let note = 'You can leave the line at any time.'
@@ -355,6 +377,23 @@ function JoinBar({ join, className = '' }) {
 
   return (
     <div className={className}>
+      {canJoin && (
+        <label className="mb-3 flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            name="priority"
+            checked={priority}
+            onChange={(event) => onPriorityChange(event.target.checked)}
+            className="mt-0.5 size-4 shrink-0 accent-accent"
+          />
+          <span className="text-sm text-ink">
+            I need priority assistance
+            <span className="mt-0.5 block text-xs text-ink-muted">
+              You'll go ahead of anyone waiting without it, and behind others who asked for it.
+            </span>
+          </span>
+        </label>
+      )}
       {error && (
         <p role="alert" className="mb-3 text-xs font-medium text-red-700">
           {error}

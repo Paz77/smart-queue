@@ -151,7 +151,7 @@ export default function QueueStatus() {
             ) : (
               <>
                 <p className="min-w-48 flex-1 text-xs leading-relaxed text-ink-muted">
-                  You can leave at any time. Joining again puts you at the back of the line.
+                  You can leave at any time. Joining again gives you a new place in line.
                 </p>
                 <Button variant="danger" size="sm" className="w-full sm:w-auto" onClick={() => setConfirmingLeave(true)}>
                   <LogOut />
@@ -172,7 +172,7 @@ export default function QueueStatus() {
         open={confirmingLeave}
         onClose={() => setConfirmingLeave(false)}
         title="Leave this queue?"
-        description={`You will give up your place (${ordinal(myEntry.position)} in line) for ${service.name}. If you join again, you will start at the back of the line.`}
+        description={`You will give up your place (${ordinal(myEntry.position)} in line) for ${service.name}. If you join again, you will get a new place in line.`}
         footer={
           <>
             <Button variant="secondary" onClick={() => setConfirmingLeave(false)}>
