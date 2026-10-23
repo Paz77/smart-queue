@@ -10,10 +10,11 @@ import { PriorityBadge } from '../../components/PriorityBadge'
 import { SelectField } from '../../components/SelectField'
 import { StatusBadge } from '../../components/StatusBadge'
 import { StatusDot } from '../../components/StatusDot'
+import { useAdminQueue } from '../../api/useAdminQueue'
 import { useNotifications } from '../../context/notifications'
 import { useOrganization } from '../../context/organization'
-import { useQueue } from '../../context/queue'
-import { estimateWait, formatRelative, formatTime, formatWait } from '../../utils/format'
+import { useServices } from '../../context/services'
+import { formatRelative, formatTime, formatWait } from '../../utils/format'
 import { STATUS_META } from '../../utils/status'
 
 // Columns of the wide queue table: place, name, joined, status, estimated wait, actions.
@@ -22,15 +23,16 @@ const COLUMNS = 'grid grid-cols-[28px_minmax(0,1fr)_92px_108px_84px_144px] items
 export default function QueueManagement() {
   const { serviceId } = useParams()
   const navigate = useNavigate()
-  const { services, entriesFor } = useQueue()
+  const { services, loaded } = useServices()
   const service = services.find((s) => s.id === serviceId)
 
   // An unknown id, or one from another organization, goes back to the list of services.
-  if (serviceId && !service) return <Navigate to="/admin/queues" replace />
+  // Only once the list has loaded, or every reload of a queue page would bounce.
+  if (serviceId && !service) return loaded ? <Navigate to="/admin/queues" replace /> : null
 
   const options = services.map((s) => ({
     value: s.id,
-    label: `${s.name} · ${entriesFor(s.id).length} waiting${s.isOpen ? '' : ' (closed)'}`,
+    label: `${s.name} · ${s.queueLength} waiting${s.isOpen ? '' : ' (closed)'}`,
   }))
 
   return (
@@ -58,7 +60,9 @@ export default function QueueManagement() {
 }
 
 function ServicePicker() {
-  const { services, entriesFor } = useQueue()
+  const { services, loaded } = useServices()
+
+  if (!loaded) return null
 
   if (services.length === 0) {
     return (
@@ -85,7 +89,7 @@ function ServicePicker() {
       <p className="mt-0.5 text-xs text-ink-muted">Pick one to see who’s waiting and call people up.</p>
       <ul className="focus-list mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {services.map((service) => {
-          const waiting = entriesFor(service.id).length
+          const waiting = service.queueLength
           const status = STATUS_META[service.isOpen ? 'open' : 'closed']
           return (
             <li key={service.id}>
@@ -121,53 +125,79 @@ function ServicePicker() {
 
 // One service's line: who is waiting, plus the controls to call, reorder and remove people.
 function ServiceQueue({ service }) {
-  const { entriesFor, serveNext, moveEntry, removeEntry, setServiceOpen, getLastCalled } = useQueue()
+  const { queue, refresh, serveNext, moveEntry, removeEntry } = useAdminQueue(service.id)
+  const { setServiceOpen, refresh: refreshServices } = useServices()
   const { organization } = useOrganization()
   const { addNotification } = useNotifications()
   const [removingId, setRemovingId] = useState(null)
   const [confirmingClose, setConfirmingClose] = useState(false)
+  // True while a change is on its way to the server, so a double click can't send it twice.
+  const [busy, setBusy] = useState(false)
 
-  const line = entriesFor(service.id)
+  const line = queue?.entries ?? []
   const removing = line.find((e) => e.id === removingId)
   const singular = organization.personSingular.toLowerCase()
   const plural = organization.personPlural.toLowerCase()
   const countPeople = (n) => `${n} ${n === 1 ? singular : plural}`
 
-  function handleServeNext() {
-    const next = line[1]
-    const served = serveNext(service.id)
-    if (!served) return
+  // Sends one change, then refreshes the overview counts. If the server says no (say someone
+  // else already served that person), show why and reload the line.
+  async function run(action, failedTitle) {
+    setBusy(true)
+    try {
+      const result = await action()
+      refreshServices()
+      return result
+    } catch (error) {
+      addNotification({ type: 'queue_update', title: failedTitle, message: error.message })
+      refresh().catch(() => {})
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleServeNext() {
+    const updated = await run(serveNext, 'Couldn’t serve the next person')
+    if (!updated?.lastCalled) return
+    const [next] = updated.entries
     addNotification({
-      organizationId: service.organizationId,
       type: 'queue_update',
-      title: `Now serving ${served.userName}`,
+      title: `Now serving ${updated.lastCalled.userName}`,
       message: next ? `${next.userName} is next in line.` : 'No one else is in line.',
     })
   }
 
   function confirmRemove() {
-    removeEntry(removing.id)
+    run(() => removeEntry(removing.id), `Couldn’t remove ${removing.userName}`)
     setRemovingId(null)
+  }
+
+  function changeOpen(isOpen) {
+    run(() => setServiceOpen(service.id, isOpen), `Couldn’t ${isOpen ? 'open' : 'close'} ${service.name}`)
   }
 
   // Closing a line with people in it asks first, the same as on the overview.
   function handleToggleOpen() {
     if (service.isOpen && line.length > 0) setConfirmingClose(true)
-    else setServiceOpen(service.id, !service.isOpen)
+    else changeOpen(!service.isOpen)
   }
 
   function confirmClose() {
-    setServiceOpen(service.id, false)
+    changeOpen(false)
     setConfirmingClose(false)
   }
 
+  const move = (entry, position) => run(() => moveEntry(entry.id, position), `Couldn’t move ${entry.userName}`)
+
   const rowProps = (entry, index) => ({
     entry,
-    wait: formatWait(estimateWait(entry.position, service.expectedDuration)),
+    wait: formatWait(entry.estimatedWait),
+    busy,
     isFirst: index === 0,
     isLast: index === line.length - 1,
-    onMoveUp: () => moveEntry(entry.id, entry.position - 1),
-    onMoveDown: () => moveEntry(entry.id, entry.position + 1),
+    onMoveUp: () => move(entry, entry.position - 1),
+    onMoveDown: () => move(entry, entry.position + 1),
     onRemove: () => setRemovingId(entry.id),
   })
 
@@ -184,7 +214,7 @@ function ServiceQueue({ service }) {
               {line.length ? countPeople(line.length) : `No ${plural}`} waiting · about {service.expectedDuration} min each
             </p>
           </div>
-          <Button onClick={handleServeNext} disabled={line.length === 0} className="w-full sm:w-auto">
+          <Button onClick={handleServeNext} disabled={busy || line.length === 0} className="w-full sm:w-auto">
             <UserCheck />
             Serve next
           </Button>
@@ -196,14 +226,14 @@ function ServiceQueue({ service }) {
               <Lock aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />
               This queue is closed. No one new can join.
             </p>
-            <Button variant="secondary" size="sm" onClick={() => setServiceOpen(service.id, true)}>
+            <Button variant="secondary" size="sm" onClick={() => changeOpen(true)}>
               <Power />
               Open queue
             </Button>
           </div>
         )}
 
-        {line.length === 0 ? (
+        {!queue ? null : line.length === 0 ? (
           <EmptyState icon={Users} title="No one’s in line" description={`${organization.personPlural} who join will show up here.`} />
         ) : (
           <>
@@ -242,7 +272,7 @@ function ServiceQueue({ service }) {
       </Card>
 
       <div className="flex min-w-0 flex-col gap-6">
-        <NowServing called={getLastCalled(service.id)} singular={singular} />
+        <NowServing called={queue?.lastCalled ?? null} singular={singular} />
         <AboutService service={service} onToggleOpen={handleToggleOpen} />
       </div>
 
@@ -335,7 +365,7 @@ function QueueCard({ entry, wait, ...actions }) {
 }
 
 // Move up / move down / remove. The narrow layout spreads them out with bigger touch targets.
-function RowActions({ entry, isFirst, isLast, onMoveUp, onMoveDown, onRemove, wide = false, className = '' }) {
+function RowActions({ entry, busy, isFirst, isLast, onMoveUp, onMoveDown, onRemove, wide = false, className = '' }) {
   const iconButton = wide ? 'size-9 px-0!' : 'size-8 px-0!'
   return (
     <div className={`flex items-center ${wide ? 'gap-2' : 'justify-end gap-1'} ${className}`}>
@@ -344,7 +374,7 @@ function RowActions({ entry, isFirst, isLast, onMoveUp, onMoveDown, onRemove, wi
         size={wide ? 'md' : 'sm'}
         className={iconButton}
         onClick={onMoveUp}
-        disabled={isFirst}
+        disabled={busy || isFirst}
         aria-label={`Move ${entry.userName} up`}
         title="Move up"
       >
@@ -355,7 +385,7 @@ function RowActions({ entry, isFirst, isLast, onMoveUp, onMoveDown, onRemove, wi
         size={wide ? 'md' : 'sm'}
         className={iconButton}
         onClick={onMoveDown}
-        disabled={isLast}
+        disabled={busy || isLast}
         aria-label={`Move ${entry.userName} down`}
         title="Move down"
       >
@@ -366,6 +396,7 @@ function RowActions({ entry, isFirst, isLast, onMoveUp, onMoveDown, onRemove, wi
         size={wide ? 'md' : 'sm'}
         className={wide ? 'ml-auto' : 'ml-1'}
         onClick={onRemove}
+        disabled={busy}
         aria-label={`Remove ${entry.userName}`}
       >
         Remove

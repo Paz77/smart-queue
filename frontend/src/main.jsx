@@ -7,6 +7,7 @@ import { HistoryProvider } from './context/HistoryProvider'
 import { NotificationProvider } from './context/NotificationProvider'
 import { OrganizationProvider } from './context/OrganizationProvider'
 import { QueueProvider } from './context/QueueProvider'
+import { ServiceProvider } from './context/ServiceProvider'
 import './index.css'
 
 createRoot(document.getElementById('root')).render(
@@ -16,9 +17,11 @@ createRoot(document.getElementById('root')).render(
         <OrganizationProvider>
           <NotificationProvider>
             <HistoryProvider>
-              <QueueProvider>
-                <App />
-              </QueueProvider>
+              <ServiceProvider>
+                <QueueProvider>
+                  <App />
+                </QueueProvider>
+              </ServiceProvider>
             </HistoryProvider>
           </NotificationProvider>
         </OrganizationProvider>
