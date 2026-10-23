@@ -13,7 +13,7 @@ from sqlmodel import Session
 from app.config import IS_DEV
 from app.db import create_tables, engine
 from app.errors import register_error_handlers
-from app.routes import auth, dev, history, notifications, organizations, queue
+from app.routes import admin_queue, auth, dev, history, notifications, organizations, queue, services
 from app.seed import seed
 
 
@@ -33,6 +33,8 @@ app.include_router(organizations.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(history.router, prefix="/api")
 app.include_router(queue.router, prefix="/api")
+app.include_router(services.router, prefix="/api")
+app.include_router(admin_queue.router, prefix="/api")
 
 # Demo controls, never in a production build.
 if IS_DEV:
