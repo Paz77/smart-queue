@@ -5,10 +5,6 @@
 
 - Serving keeps the row (status "served", position 0, served_at set) until the
   person dismisses it or joins again. 
-
-
-_ordinal and the {id: position} snapshots are stand ins
-for notifications.ordinal and notifications.snapshot_positions.
 """
 
 from datetime import datetime, timezone
@@ -35,7 +31,7 @@ def join(session: Session, user: User, service: Service, priority: str = "normal
 
     dismiss_served(session, user, service.organization_id)
     current = line(session, service.id)
-    before = {e.id: e.position for e in current}
+    before = notifications.snapshot_positions(session, service.id)
     entry = QueueEntry(
         service_id=service.id,
         user_id=user.id,
@@ -54,7 +50,7 @@ def join(session: Session, user: User, service: Service, priority: str = "normal
         service.organization_id,
         "queue_update",
         f"Joined {service.name}",
-        f"You are {_ordinal(entry.position)} in line. Estimated wait is {wait}.",
+        f"You are {notifications.ordinal(entry.position)} in line. Estimated wait is {wait}.",
     )
     return entry
 
@@ -81,7 +77,7 @@ def serve_entry(session: Session, entry: QueueEntry) -> QueueEntry:
     _check_in_line(entry)
     service = session.get(Service, entry.service_id)
     current = line(session, service.id)
-    before = {e.id: e.position for e in current}
+    before = notifications.snapshot_positions(session, service.id)
 
     entry.status = "served"
     entry.position = 0
@@ -113,7 +109,7 @@ def move(session: Session, entry: QueueEntry, position: int) -> None:
     if target == index + 1:
         return
 
-    before = {e.id: e.position for e in current}
+    before = notifications.snapshot_positions(session, service.id)
     others = current[:index] + current[index + 1 :]
     others.insert(target - 1, current[index])
     _renumber(others)
@@ -136,7 +132,7 @@ def set_priority(session: Session, entry: QueueEntry, priority: str) -> None:
 
     service = session.get(Service, entry.service_id)
     current = line(session, service.id)
-    before = {e.id: e.position for e in current}
+    before = notifications.snapshot_positions(session, service.id)
     index = _index_of(current, entry)
     entry = current[index]
     others = current[:index] + current[index + 1 :]
@@ -245,18 +241,10 @@ def _active_entry(session: Session, user_id: str, organization_id: str) -> Queue
 def _take_out(session: Session, service: Service, entry: QueueEntry, outcome: str, title: str, message: str) -> None:
     """Record the visit, delete the entry and close the gap it leaves"""
     current = line(session, service.id)
-    before = {e.id: e.position for e in current}
+    before = notifications.snapshot_positions(session, service.id)
     history.record_visit(session, entry, outcome)  # while the row still exists
     session.delete(entry)
     _renumber([e for e in current if e.id != entry.id])
 
     notifications.announce_line_changes(session, service, before)
     notifications.notify(session, entry.user_id, service.organization_id, "status_change", title, message)
-
-
-# Copy of notifications.ordinal from Tina's branch, switch to it once that merges
-def _ordinal(n: int) -> str:
-    """1 -> "1st", 2 -> "2nd", 11 -> "11th"."""
-    if 10 <= n % 100 <= 20:
-        return f"{n}th"
-    return f"{n}" + {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
