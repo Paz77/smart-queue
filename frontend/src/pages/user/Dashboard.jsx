@@ -75,6 +75,8 @@ function CurrentQueue() {
   }
 
   const service = getService(myEntry.serviceId)
+  // The queue entry can arrive a tick before the service list does.
+  if (!service) return null
   const isServed = myEntry.status === 'served'
   const lineLength = entriesFor(myEntry.serviceId).length
   const wait = estimateWait(myEntry.position, service.expectedDuration)

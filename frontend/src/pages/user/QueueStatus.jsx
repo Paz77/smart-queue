@@ -10,7 +10,7 @@ import { StatusBadge } from '../../components/StatusBadge'
 import { StatusDot } from '../../components/StatusDot'
 import { useNotifications } from '../../context/notifications'
 import { useQueue } from '../../context/queue'
-import { capitalize, estimateWait, formatRelative, formatTime, formatWait, minutesBetween, ordinal } from '../../utils/format'
+import { capitalize, formatRelative, formatTime, formatWait, minutesBetween, ordinal } from '../../utils/format'
 import { STATUS_META, STATUS_STEPS } from '../../utils/status'
 
 const STEP_COPY = {
@@ -56,6 +56,18 @@ export default function QueueStatus() {
   const line = entriesFor(myEntry.serviceId)
   const isServed = myEntry.status === 'served'
 
+  // The entry arrives before the service list on a cold load.
+  if (!service) {
+    return (
+      <>
+        {header}
+        <Card>
+          <EmptyState icon={Timer} title="Loading your place in line" description="Fetching it from the server." />
+        </Card>
+      </>
+    )
+  }
+
   return (
     <>
       {header}
@@ -97,7 +109,7 @@ export default function QueueStatus() {
                 <Metric label="Position" value={myEntry.position} hint={`of ${line.length} in line`} />
                 <Metric
                   label="Estimated wait"
-                  value={formatWait(estimateWait(myEntry.position, service.expectedDuration))}
+                  value={formatWait(myEntry.estimatedWait)}
                   hint={`About ${service.expectedDuration} min per person`}
                 />
                 <Metric
