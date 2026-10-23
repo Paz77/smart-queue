@@ -8,7 +8,8 @@ import { Modal } from '../../components/Modal'
 import { PageHeader } from '../../components/PageHeader'
 import { useOrganization } from '../../context/organization'
 import { useQueue } from '../../context/queue'
-import { estimateWait, formatTime, formatWait, ordinal } from '../../utils/format'
+import { useServices } from '../../context/services'
+import { formatTime, formatWait, ordinal } from '../../utils/format'
 import { required } from '../../utils/validation'
 
 const SPOT_LIMIT = 8
@@ -29,11 +30,14 @@ function turnAround(now, minutes) {
 }
 
 export default function JoinQueue() {
-  const { services, entriesFor, myEntry, joinQueue, leaveQueue } = useQueue()
+  const { services, loaded } = useServices()
+  const { myEntry, joinQueue, leaveQueue } = useQueue()
   const { organization } = useOrganization()
   const [searchParams, setSearchParams] = useSearchParams()
   const [error, setError] = useState('')
   const [leaving, setLeaving] = useState(false)
+  //True while a join is on its way to the server, so a double click can't send it twice
+  const [joining, setJoining] = useState(false)
   const now = useNow()
 
   const people = organization.personPlural?.toLowerCase() ?? 'people'
@@ -41,11 +45,12 @@ export default function JoinQueue() {
   const activeEntry = myEntry && myEntry.status !== 'served' ? myEntry : null
 
   const all = services.map((service) => {
-    const waiting = entriesFor(service.id).length
+    const waiting = service.queueLength
     const isMine = activeEntry?.serviceId === service.id
     //Your real place if you are in this line, otherwise the place you would get by joining now
     const spot = isMine ? activeEntry.position : waiting + 1
-    const wait = estimateWait(spot, service.expectedDuration)
+    //Both waits are worked out by the server
+    const wait = isMine ? activeEntry.estimatedWait : service.estimatedWait
     return { ...service, waiting, isMine, spot, wait, turnAt: turnAround(now, wait) }
   })
   //Open services from shortest to longest wait, then closed ones
@@ -59,7 +64,7 @@ export default function JoinQueue() {
   const selected = rows.find((service) => service.id === searchParams.get('service')) ?? mine
   //You can only hold one place at a time, and closed lines take no one new
   const canJoin = Boolean(selected?.isOpen) && !activeEntry
-  const join = { selected, mine, canJoin, error, people }
+  const join = { selected, mine, canJoin, joining, error, people }
 
   function pick(serviceId) {
     setSearchParams({ service: serviceId }, { replace: true })
@@ -67,21 +72,34 @@ export default function JoinQueue() {
   }
 
   //Give up your place; if no other line is picked, keep this one picked so joining again is one click
-  function confirmLeave() {
+  async function confirmLeave() {
     setLeaving(false)
     if (!searchParams.get('service')) setSearchParams({ service: mine.id }, { replace: true })
-    leaveQueue()
+    try {
+      await leaveQueue()
+    } catch (failure) {
+      setError(failure.message)
+    }
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     const problem = required(selected?.id, 'Service')
     if (problem) {
       setError(problem)
       return
     }
-    if (!canJoin) return
-    if (!joinQueue(selected.id)) setError('That line could not be joined. Please try again.')
+    if (!canJoin || joining) return
+    setError('')
+    setJoining(true)
+    try {
+      await joinQueue(selected.id)
+    } catch (failure) {
+      //The server's reason, e.g. "Academic Advising is closed right now."
+      setError(failure.message)
+    } finally {
+      setJoining(false)
+    }
   }
 
   return (
@@ -94,7 +112,7 @@ export default function JoinQueue() {
 
       <div aria-live="polite">{mine && <InLineCard service={mine} onLeave={() => setLeaving(true)} />}</div>
 
-      {rows.length === 0 ? (
+      {!loaded ? null : rows.length === 0 ? (
         <NoServices organizationName={organization.name} />
       ) : (
         <form noValidate onSubmit={handleSubmit}>
@@ -316,7 +334,7 @@ function ClosedNote({ service, people }) {
 
 //The note and Join button at the bottom of the card
 function JoinBar({ join, className = '' }) {
-  const { selected, mine, canJoin, error } = join
+  const { selected, mine, canJoin, joining, error } = join
   const inThisLine = Boolean(selected?.isMine)
 
   let note = 'You can leave the line at any time.'
@@ -332,6 +350,7 @@ function JoinBar({ join, className = '' }) {
 
   let label = 'Join line'
   if (inThisLine) label = 'Already in this line'
+  else if (joining) label = 'Joining…'
   else if (canJoin) label = `Join ${selected.name}`
 
   return (
@@ -343,7 +362,7 @@ function JoinBar({ join, className = '' }) {
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="min-w-48 flex-1 text-xs leading-relaxed text-ink-muted">{note}</p>
-        <Button type="submit" disabled={!canJoin} className="w-full sm:w-auto">
+        <Button type="submit" disabled={!canJoin || joining} className="w-full sm:w-auto">
           {inThisLine ? <Check /> : <ListPlus />}
           {label}
         </Button>

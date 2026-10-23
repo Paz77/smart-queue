@@ -20,6 +20,11 @@ export const STATUS_META = {
     className: 'bg-stone-100 text-stone-600 border-stone-200',
     dot: 'bg-stone-400',
   },
+  removed: {
+    label: 'Removed',
+    className: 'bg-stone-100 text-stone-700 border-stone-300',
+    dot: 'bg-stone-500',
+  },
   no_show: {
     label: 'No-show',
     className: 'bg-red-50 text-red-800 border-red-200',

@@ -1,6 +1,7 @@
 import { Check, ListPlus, LogOut, Timer } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQueueLine } from '../../api/useQueueLine'
 import { Button } from '../../components/Button'
 import { Card, CardHeader } from '../../components/Card'
 import { EmptyState } from '../../components/EmptyState'
@@ -10,7 +11,8 @@ import { StatusBadge } from '../../components/StatusBadge'
 import { StatusDot } from '../../components/StatusDot'
 import { useNotifications } from '../../context/notifications'
 import { useQueue } from '../../context/queue'
-import { capitalize, estimateWait, formatRelative, formatTime, formatWait, minutesBetween, ordinal } from '../../utils/format'
+import { useServices } from '../../context/services'
+import { capitalize, formatRelative, formatTime, formatWait, minutesBetween, ordinal } from '../../utils/format'
 import { STATUS_META, STATUS_STEPS } from '../../utils/status'
 
 const STEP_COPY = {
@@ -20,8 +22,21 @@ const STEP_COPY = {
 }
 
 export default function QueueStatus() {
-  const { myEntry, getService, entriesFor, leaveQueue, clearServed } = useQueue()
+  const { myEntry, loaded, leaveQueue, clearServed } = useQueue()
+  const { getService } = useServices()
+  const { addNotification } = useNotifications()
+  // The line itself, for the squares below. Only loaded while you are still waiting in it.
+  const { line: queueLine } = useQueueLine(myEntry?.status === 'served' ? null : myEntry?.serviceId)
   const [confirmingLeave, setConfirmingLeave] = useState(false)
+
+  // Errors come back from the server; show them as a toast, the same way the admin screens do.
+  async function run(action, failedTitle) {
+    try {
+      await action()
+    } catch (error) {
+      addNotification({ type: 'queue_update', title: failedTitle, message: error.message })
+    }
+  }
 
   const header = (
     <PageHeader
@@ -30,6 +45,9 @@ export default function QueueStatus() {
       description="Your live place in line. This page updates each time the desk calls someone forward."
     />
   )
+
+  // Wait for the server before saying you are not in a queue.
+  if (!loaded) return header
 
   if (!myEntry) {
     return (
@@ -53,7 +71,10 @@ export default function QueueStatus() {
   }
 
   const service = getService(myEntry.serviceId)
-  const line = entriesFor(myEntry.serviceId)
+  // The services list is still loading.
+  if (!service) return header
+  const line = queueLine?.entries ?? []
+  const lineLength = queueLine?.length ?? service.queueLength
   const isServed = myEntry.status === 'served'
 
   return (
@@ -68,7 +89,7 @@ export default function QueueStatus() {
               <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">{service.name}</h2>
               <p className="mt-1 text-xs text-ink-muted">
                 Joined at {formatTime(myEntry.joinedAt)}
-                {!isServed && ` · ${line.length} ${line.length === 1 ? 'person' : 'people'} in line`}
+                {!isServed && ` · ${lineLength} ${lineLength === 1 ? 'person' : 'people'} in line`}
               </p>
             </div>
             <StatusBadge status={myEntry.status} live />
@@ -94,10 +115,10 @@ export default function QueueStatus() {
           ) : (
             <>
               <dl aria-live="polite" className="grid divide-y divide-line sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                <Metric label="Position" value={myEntry.position} hint={`of ${line.length} in line`} />
+                <Metric label="Position" value={myEntry.position} hint={`of ${lineLength} in line`} />
                 <Metric
                   label="Estimated wait"
-                  value={formatWait(estimateWait(myEntry.position, service.expectedDuration))}
+                  value={formatWait(myEntry.estimatedWait)}
                   hint={`About ${service.expectedDuration} min per person`}
                 />
                 <Metric
@@ -122,7 +143,7 @@ export default function QueueStatus() {
                   <Button variant="secondary" size="sm" as={Link} to="/app/history">
                     View history
                   </Button>
-                  <Button size="sm" onClick={clearServed}>
+                  <Button size="sm" onClick={() => run(clearServed, 'Couldn’t clear this visit')}>
                     Done
                   </Button>
                 </div>
@@ -142,7 +163,7 @@ export default function QueueStatus() {
         </Card>
 
         <div className="min-w-0 space-y-6">
-          <ServiceDetails service={service} lineLength={line.length} />
+          <ServiceDetails service={service} lineLength={lineLength} />
           <RecentUpdates />
         </div>
       </div>
@@ -160,8 +181,8 @@ export default function QueueStatus() {
             <Button
               variant="danger-solid"
               onClick={() => {
-                leaveQueue()
                 setConfirmingLeave(false)
+                run(leaveQueue, 'Couldn’t leave the queue')
               }}
             >
               Leave queue

@@ -6,10 +6,12 @@ import { Card } from '../../components/Card'
 import { PageHeader } from '../../components/PageHeader'
 import { StatusBadge } from '../../components/StatusBadge'
 import { useAuth } from '../../context/auth'
+import { useHistory } from '../../context/history'
 import { useNotifications } from '../../context/notifications'
 import { useOrganization } from '../../context/organization'
 import { useQueue } from '../../context/queue'
-import { estimateWait, formatRelative, formatTime, formatWait, minutesBetween, ordinal } from '../../utils/format'
+import { useServices } from '../../context/services'
+import { formatRelative, formatTime, formatWait, minutesBetween, ordinal } from '../../utils/format'
 import { STATUS_META } from '../../utils/status'
 
 const STATUS_HINT = {
@@ -53,8 +55,12 @@ export default function Dashboard() {
 
 //Your place in line right now: waiting, just called to the desk, or not in a queue
 function CurrentQueue() {
-  const { myEntry, getService, entriesFor } = useQueue()
+  const { myEntry, loaded } = useQueue()
+  const { getService } = useServices()
   const now = useNow()
+
+  //Nothing until the server answers, so the card doesn't flash "not in a line" first
+  if (!loaded) return null
 
   if (!myEntry) {
     return (
@@ -75,9 +81,12 @@ function CurrentQueue() {
   }
 
   const service = getService(myEntry.serviceId)
+  //The services list is still loading
+  if (!service) return null
   const isServed = myEntry.status === 'served'
-  const lineLength = entriesFor(myEntry.serviceId).length
-  const wait = estimateWait(myEntry.position, service.expectedDuration)
+  const lineLength = service.queueLength
+  //Worked out by the server: your place in line x minutes per person
+  const wait = myEntry.estimatedWait
 
   return (
     <Card>
@@ -131,22 +140,23 @@ const METER_SLOTS = 8
 
 //Every service here: open ones from shortest to longest wait, then closed ones
 function ActiveServices() {
-  const { services, entriesFor, myEntry } = useQueue()
+  const { services, loaded } = useServices()
+  const { myEntry } = useQueue()
   const { organization } = useOrganization()
 
   const inLine = Boolean(myEntry) && myEntry.status !== 'served'
   const people = organization.personPlural?.toLowerCase() ?? 'people'
 
   const rows = services.map((service) => {
-    const waiting = entriesFor(service.id).length
+    const waiting = service.queueLength
     const isMine = inLine && myEntry.serviceId === service.id
     return {
       ...service,
       waiting,
       isMine,
       position: isMine ? myEntry.position : null,
-      //Your own wait if you are in this line, otherwise the wait if you joined now
-      wait: estimateWait(isMine ? myEntry.position : waiting + 1, service.expectedDuration),
+      //Your own wait if you are in this line, otherwise the wait if you joined now (both from the server)
+      wait: isMine ? myEntry.estimatedWait : service.estimatedWait,
       to: isMine ? '/app/status' : `/app/join?service=${service.id}`,
       //You can only be in one line at a time, so other lines are just for looking
       action: isMine ? 'View status' : inLine ? 'See wait' : 'Join',
@@ -156,6 +166,9 @@ function ActiveServices() {
   const open = rows.filter((service) => service.isOpen).sort((a, b) => a.wait - b.wait)
   const closed = rows.filter((service) => !service.isOpen)
   const shortestId = open.find((service) => !service.isMine)?.id
+
+  //Wait for the first load so it doesn't flash "no services" first
+  if (!loaded) return null
 
   return (
     <section aria-labelledby="services-heading">
@@ -399,18 +412,19 @@ function TimelineItem({ notification, now, isLast, onRead }) {
 }
 
 const shortDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
-const OUTCOMES = ['served', 'left', 'no_show']
-//Served uses the organization's own color; the two ways a visit can end early are greys
+const OUTCOMES = ['served', 'left', 'removed', 'no_show']
+//Served uses the organization's own color; the ways a visit can end early are greys
 const OUTCOME_COLOR = {
   served: 'bg-accent',
   left: 'bg-stone-400',
+  removed: 'bg-stone-500',
   no_show: 'bg-stone-600',
 }
 
 //Stats from every line you have been in here: how your visits ended, plus a few quick facts
 function VisitStats() {
-  const { history, getService } = useQueue()
-  const summary = summarizeHistory(history, getService)
+  const { history } = useHistory()
+  const summary = summarizeHistory(history)
   const { visits, firstVisit } = summary
 
   return (
@@ -494,17 +508,16 @@ function OutcomeSplit({ summary }) {
 }
 
 //Your visits oldest first, how they ended, your average wait, and a breakdown per service
-function summarizeHistory(history, getService) {
+function summarizeHistory(history) {
   const visits = history
     .map((visit) => ({
       ...visit,
-      serviceName: getService(visit.serviceId)?.name ?? 'Unknown service',
       wait: visit.outcome === 'served' && visit.servedAt ? minutesBetween(visit.joinedAt, visit.servedAt) : null,
     }))
     .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt))
   const served = visits.filter((visit) => visit.wait !== null)
 
-  const counts = { served: 0, left: 0, no_show: 0 }
+  const counts = { served: 0, left: 0, removed: 0, no_show: 0 }
   visits.forEach((visit) => {
     counts[visit.outcome] = (counts[visit.outcome] ?? 0) + 1
   })

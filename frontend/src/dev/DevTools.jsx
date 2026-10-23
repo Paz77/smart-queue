@@ -4,9 +4,11 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { Button } from '../components/Button'
 import { useAuth } from '../context/auth'
+import { useHistory } from '../context/history'
 import { useNotifications } from '../context/notifications'
 import { useOrganization } from '../context/organization'
 import { useQueue } from '../context/queue'
+import { useServices } from '../context/services'
 import { users } from '../mocks/users'
 import { ordinal } from '../utils/format'
 
@@ -58,12 +60,13 @@ function DevPanel({ onClose }) {
   const isAdminView = useLocation().pathname.startsWith('/admin')
   const { currentUser, signInAs } = useAuth()
   const { organizations, organization, personLabel, setOrganizationId } = useOrganization()
-  const { myEntry, entriesFor, getService, serveNext, serveEntry, moveEntry, resetOrganization } = useQueue()
+  const { myEntry, refresh: refreshQueue } = useQueue()
+  const { getService, refresh: refreshServices } = useServices()
+  const { refresh: refreshHistory } = useHistory()
   const { resetNotifications } = useNotifications()
 
   const adminOf = (organizationId) => users.find((u) => u.role === 'admin' && u.organizationId === organizationId)
   const active = myEntry?.status === 'served' ? null : myEntry
-  const line = active ? entriesFor(active.serviceId) : []
   const service = active ? getService(active.serviceId) : null
 
   async function switchOrganization(id) {
@@ -78,28 +81,20 @@ function DevPanel({ onClose }) {
     navigate(admin ? '/admin/dashboard' : '/app/status')
   }
 
-  const setStatus = {
-    waiting: () => moveEntry(active.id, line.length),
-    almost_ready: () => moveEntry(active.id, Math.min(2, line.length)),
-    served: () => serveEntry(active.id),
-  }
-
   let lineSummary = 'Not in a line.'
-  if (isAdminView) lineSummary = `Switch to the ${personLabel.toLowerCase()} view to control a place in line.`
-  else if (active) lineSummary = `${ordinal(active.position)} of ${line.length} in ${service.name}.`
-  else if (myEntry) lineSummary = 'Called to the desk. Reset the demo data to queue again.'
+  if (isAdminView) lineSummary = `Switch to the ${personLabel.toLowerCase()} view to see a place in line.`
+  else if (myEntry?.status === 'served') lineSummary = 'Called to the desk. Join a line to queue again.'
+  else if (service) lineSummary = `${ordinal(active.position)} of ${service.queueLength} in ${service.name}.`
 
   // Wipes the server's data and loads the sample set again, then pulls the
-  // fresh rows back down. The queue screens still read their own mock state,
-  // so that is reset alongside until they are wired to the API.
+  // fresh rows back down rather than waiting for the next poll.
   async function resetDemo() {
     const signedInAs = currentUser?.id
     await api.post('/dev/reset')
     // The reset clears the token table too, so sign back in as the same person
     // rather than dropping whoever clicked it at the login screen.
     if (signedInAs) await signInAs(signedInAs)
-    resetOrganization(organization.id)
-    await resetNotifications()
+    await Promise.all([refreshQueue(), refreshServices(), refreshHistory(), resetNotifications()])
   }
 
   return (
@@ -146,26 +141,8 @@ function DevPanel({ onClose }) {
         </Section>
 
         <Section title="Place in line">
-          <p className="mb-2 text-xs text-ink-muted">{lineSummary}</p>
-          <Segmented
-            label="Set my status"
-            value={active?.status}
-            onChange={(status) => setStatus[status]()}
-            options={[
-              { value: 'waiting', label: 'Waiting', disabled: !active || line.length < 3 },
-              { value: 'almost_ready', label: 'Almost ready', disabled: !active },
-              { value: 'served', label: 'Served', disabled: !active },
-            ]}
-          />
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mt-2 w-full"
-            disabled={!active || active.position === 1}
-            onClick={() => serveNext(active.serviceId)}
-          >
-            Serve the next person
-          </Button>
+          <p className="text-xs text-ink-muted">{lineSummary}</p>
+          <p className="mt-1 text-xs text-ink-subtle">To serve or move people, switch to the Admin view and open Queues.</p>
         </Section>
 
         <Section title="Data">
