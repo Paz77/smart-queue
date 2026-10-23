@@ -26,6 +26,7 @@ export default function Login() {
   const [values, setValues] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState({ email: '', password: '' })
   const [formError, setFormError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -40,7 +41,7 @@ export default function Login() {
     setErrors((current) => ({ ...current, [name]: validate(name, value) }))
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     const nextErrors = {
       email: validate('email', values.email),
@@ -49,14 +50,22 @@ export default function Login() {
     setErrors(nextErrors)
     if (nextErrors.email || nextErrors.password) return
 
-    const user = login(values.email, values.password)
-    if (!user) {
-      setFormError('That email and password don’t match an account.')
-      return
+    setBusy(true)
+    try {
+      const user = await login(values.email, values.password)
+      // Admins manage one organization, so show theirs.
+      if (user.organizationId) setOrganizationId(user.organizationId)
+      navigate(HOME_BY_ROLE[user.role] ?? HOME_BY_ROLE.user, { replace: true })
+    } catch (cause) {
+      // The server reports bad credentials as a whole-form problem, and anything
+      // it blames on a field goes under that field.
+      setErrors((current) => ({ ...current, ...cause.fields }))
+      if (!cause.fields || Object.keys(cause.fields).length === 0) {
+        setFormError(cause.message ?? 'Could not sign you in.')
+      }
+    } finally {
+      setBusy(false)
     }
-    // Admins manage one organization, so show theirs.
-    if (user.organizationId) setOrganizationId(user.organizationId)
-    navigate(HOME_BY_ROLE[user.role] ?? HOME_BY_ROLE.user, { replace: true })
   }
 
   return (
@@ -97,9 +106,9 @@ export default function Login() {
         />
       </div>
 
-      <Button type="submit" className="mt-6 w-full">
+      <Button type="submit" className="mt-6 w-full" disabled={busy}>
         <LogIn />
-        Log in
+        {busy ? 'Signing in…' : 'Log in'}
       </Button>
     </AuthCard>
   )
