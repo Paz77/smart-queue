@@ -11,11 +11,14 @@ import { SelectField } from '../../components/SelectField'
 import { StatusDot } from '../../components/StatusDot'
 import { TextAreaField } from '../../components/TextAreaField'
 import { TextField } from '../../components/TextField'
+import { useNotifications } from '../../context/notifications'
 import { useOrganization } from '../../context/organization'
-import { useQueue } from '../../context/queue'
+import { useServices } from '../../context/services'
 import { STATUS_META } from '../../utils/status'
 
+// The same limits the API enforces (see ServiceCreate in backend/app/models/service.py).
 const NAME_MAX_LENGTH = 100
+const DESCRIPTION_MAX_LENGTH = 500
 const DURATION_MIN = 1
 const DURATION_MAX = 480
 const PRIORITY_OPTIONS = [
@@ -33,7 +36,10 @@ function validate(field, value) {
       if (!value.trim()) return 'Enter a service name.'
       return value.length > NAME_MAX_LENGTH ? `Service name can't be longer than ${NAME_MAX_LENGTH} characters.` : ''
     case 'description':
-      return value.trim() ? '' : 'Enter a description.'
+      if (!value.trim()) return 'Enter a description.'
+      return value.length > DESCRIPTION_MAX_LENGTH
+        ? `Description can't be longer than ${DESCRIPTION_MAX_LENGTH} characters.`
+        : ''
     case 'expectedDuration': {
       const text = value.trim()
       const minutes = Number(text)
@@ -64,7 +70,8 @@ const toFields = (values) => ({
 })
 
 export default function ServiceManagement() {
-  const { services, createService, updateService } = useQueue()
+  const { services, createService, updateService } = useServices()
+  const { addNotification } = useNotifications()
   const [searchParams, setSearchParams] = useSearchParams()
   // Bumped whenever the admin picks what to work on, so the form puts the cursor in its first field.
   const [focusRequest, setFocusRequest] = useState(0)
@@ -77,9 +84,15 @@ export default function ServiceManagement() {
     setFocusRequest((n) => n + 1)
   }
 
-  function handleSave(fields) {
-    if (editing) updateService(editing.id, fields)
-    else createService(fields)
+  // Throws the ApiError if the server rejects it, so the form can show the field messages.
+  async function handleSave(fields) {
+    if (editing) {
+      const saved = await updateService(editing.id, fields)
+      addNotification({ type: 'service_update', title: 'Changes saved', message: `${saved.name} is up to date.` })
+    } else {
+      const saved = await createService(fields)
+      addNotification({ type: 'service_update', title: 'Service created', message: `${saved.name} was added to the list.` })
+    }
   }
 
   return (
@@ -168,6 +181,9 @@ function ServiceForm({ service, focusRequest, onSave, onCancel }) {
   const { organization } = useOrganization()
   const [values, setValues] = useState(() => (service ? toValues(service) : EMPTY))
   const [errors, setErrors] = useState(EMPTY)
+  // A server error that isn't about one field, like a lost connection.
+  const [formError, setFormError] = useState('')
+  const [saving, setSaving] = useState(false)
   const nameRef = useRef(null)
 
   useEffect(() => {
@@ -186,21 +202,35 @@ function ServiceForm({ service, focusRequest, onSave, onCancel }) {
     setErrors((current) => ({ ...current, [name]: validate(name, value) }))
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
+    const form = event.currentTarget
     const nextErrors = Object.fromEntries(FIELDS.map((field) => [field, validate(field, values[field])]))
     setErrors(nextErrors)
+    setFormError('')
 
     const firstInvalid = FIELDS.find((field) => nextErrors[field])
     if (firstInvalid) {
-      event.currentTarget.elements.namedItem(firstInvalid).focus()
+      form.elements.namedItem(firstInvalid).focus()
       return
     }
 
     const fields = toFields(values)
-    onSave(fields)
-    // After creating, clear the form for the next one; after editing, keep the saved values.
-    setValues(service ? toValues(fields) : EMPTY)
+    setSaving(true)
+    try {
+      await onSave(fields)
+      // After creating, clear the form for the next one; after editing, keep the saved values.
+      setValues(service ? toValues(fields) : EMPTY)
+    } catch (error) {
+      // The server's field names match the form's, so its messages go straight under each field.
+      const serverErrors = Object.fromEntries(FIELDS.map((field) => [field, error.fields?.[field] ?? '']))
+      setErrors(serverErrors)
+      const firstRejected = FIELDS.find((field) => serverErrors[field])
+      if (firstRejected) form.elements.namedItem(firstRejected).focus()
+      else setFormError(error.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const fieldProps = (name) => ({ name, value: values[name], error: errors[name], onChange: handleChange, onBlur: handleBlur })
@@ -224,6 +254,8 @@ function ServiceForm({ service, focusRequest, onSave, onCancel }) {
           <TextAreaField
             label="Description"
             placeholder={`What can ${organization.personPlural.toLowerCase()} get help with here?`}
+            hint={`${values.description.length}/${DESCRIPTION_MAX_LENGTH}`}
+            hintError={values.description.length > DESCRIPTION_MAX_LENGTH}
             {...fieldProps('description')}
           />
           <div className="grid gap-5 sm:grid-cols-2">
@@ -250,12 +282,19 @@ function ServiceForm({ service, focusRequest, onSave, onCancel }) {
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-line bg-sunken/80 px-5 py-3">
+          {formError && (
+            <p role="alert" className="mr-auto text-sm text-red-700">
+              {formError}
+            </p>
+          )}
           {service && (
             <Button variant="secondary" onClick={onCancel}>
               Cancel
             </Button>
           )}
-          <Button type="submit">{service ? 'Save changes' : 'Create service'}</Button>
+          <Button type="submit" disabled={saving}>
+            {service ? 'Save changes' : 'Create service'}
+          </Button>
         </div>
       </form>
     </Card>

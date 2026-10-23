@@ -8,9 +8,10 @@ import { Modal } from '../../components/Modal'
 import { PageHeader } from '../../components/PageHeader'
 import { PriorityBadge } from '../../components/PriorityBadge'
 import { StatusBadge } from '../../components/StatusBadge'
+import { useNotifications } from '../../context/notifications'
 import { useOrganization } from '../../context/organization'
-import { useQueue } from '../../context/queue'
-import { estimateWait, formatWait } from '../../utils/format'
+import { useServices } from '../../context/services'
+import { formatWait } from '../../utils/format'
 
 const PRIORITIES = ['high', 'medium', 'low']
 
@@ -21,8 +22,9 @@ const manageLink = (service) => `/admin/queues/${service.id}`
 const editLink = (service) => `/admin/services?edit=${service.id}`
 
 export default function AdminDashboard() {
-  const { services, entriesFor, setServiceOpen } = useQueue()
+  const { services, loaded, setServiceOpen } = useServices()
   const { organization } = useOrganization()
+  const { addNotification } = useNotifications()
   const [closingId, setClosingId] = useState(null)
 
   const people = organization.personPlural.toLowerCase()
@@ -44,6 +46,9 @@ export default function AdminDashboard() {
     />
   )
 
+  // Until the first load, show just the header rather than flashing the "no services" state.
+  if (!loaded) return header
+
   if (services.length === 0) {
     return (
       <>
@@ -61,15 +66,12 @@ export default function AdminDashboard() {
     )
   }
 
-  const rows = services.map((service) => {
-    const waiting = entriesFor(service.id).length
-    return {
-      ...service,
-      waiting,
-      // What someone joining right now would wait: everyone ahead of them, plus their own turn.
-      waitIfJoining: service.isOpen ? formatWait(estimateWait(waiting + 1, service.expectedDuration)) : '—',
-    }
-  })
+  const rows = services.map((service) => ({
+    ...service,
+    waiting: service.queueLength,
+    // What someone joining right now would wait, worked out by the server.
+    waitIfJoining: service.isOpen ? formatWait(service.estimatedWait) : '—',
+  }))
 
   const openCount = rows.filter((s) => s.isOpen).length
   const totalWaiting = rows.reduce((sum, s) => sum + s.waiting, 0)
@@ -83,14 +85,22 @@ export default function AdminDashboard() {
 
   const closing = rows.find((s) => s.id === closingId)
 
+  async function changeOpen(service, isOpen) {
+    try {
+      await setServiceOpen(service.id, isOpen)
+    } catch (error) {
+      addNotification({ type: 'service_update', title: `Couldn’t ${isOpen ? 'open' : 'close'} ${service.name}`, message: error.message })
+    }
+  }
+
   // Closing a line with people in it asks first; everything else happens right away.
   function handleToggle(service) {
     if (service.isOpen && service.waiting > 0) setClosingId(service.id)
-    else setServiceOpen(service.id, !service.isOpen)
+    else changeOpen(service, !service.isOpen)
   }
 
   function confirmClose() {
-    setServiceOpen(closing.id, false)
+    changeOpen(closing, false)
     setClosingId(null)
   }
 
