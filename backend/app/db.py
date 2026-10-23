@@ -4,6 +4,7 @@ Routes get a session with `session: Session = Depends(get_session)` and pass it
 into logic functions. Tests swap get_session for their own (see tests/conftest.py).
 """
 
+import threading
 from collections.abc import Iterator
 
 from sqlalchemy.pool import StaticPool
@@ -32,6 +33,10 @@ def make_engine(url: str = DATABASE_URL):
 
 engine = make_engine()
 
+# Requests run on several threads at once, and SQLite can't serve two threads on one
+# connection. Every request takes this lock, so they use the database one at a time.
+_lock = threading.Lock()
+
 
 def create_tables(target_engine=engine) -> None:
     """Create a table for every model."""
@@ -42,5 +47,5 @@ def create_tables(target_engine=engine) -> None:
 
 def get_session() -> Iterator[Session]:
     """FastAPI dependency: one session per request, closed when the request ends."""
-    with Session(engine) as session:
+    with _lock, Session(engine) as session:
         yield session

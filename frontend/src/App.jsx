@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { RedirectIfSignedIn, RequireAuth } from './components/RequireAuth'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import QueueManagement from './pages/admin/QueueManagement'
 import ServiceManagement from './pages/admin/ServiceManagement'
@@ -14,10 +15,10 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/login" element={<RedirectIfSignedIn><Login /></RedirectIfSignedIn>} />
+      <Route path="/register" element={<RedirectIfSignedIn><Register /></RedirectIfSignedIn>} />
 
-      <Route path="/app" element={<Layout />}>
+      <Route path="/app" element={<RequireAuth role="user"><Layout /></RequireAuth>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="join" element={<JoinQueue />} />
@@ -25,7 +26,7 @@ export default function App() {
         <Route path="history" element={<History />} />
       </Route>
 
-      <Route path="/admin" element={<Layout />}>
+      <Route path="/admin" element={<RequireAuth role="admin"><Layout /></RequireAuth>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="services" element={<ServiceManagement />} />
