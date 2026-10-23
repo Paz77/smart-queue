@@ -489,11 +489,3 @@ def test_engine_never_commits(session, monkeypatch, action):
 )
 def test_format_wait(minutes, expected):
     assert queue_engine.format_wait(minutes) == expected
-
-#REMINDER TO DELERTE WITH _ordinal once Tina merges her branch
-@pytest.mark.parametrize(
-    "number,expected",
-    [(1, "1st"), (2, "2nd"), (3, "3rd"), (4, "4th"), (11, "11th"), (12, "12th"), (13, "13th"), (21, "21st"), (102, "102nd")],
-)
-def test_ordinal(number, expected):
-    assert queue_engine._ordinal(number) == expected

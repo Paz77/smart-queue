@@ -300,3 +300,43 @@ def test_dismiss_leaves_a_waiting_entry_alone(user_client, session):
     response = user_client.delete(SERVED, params=NORTHGATE)
     assert response.status_code == 204, response.text
     assert ("q-4", 4, "waiting") in snapshot(session)
+
+
+# --- history and notifications
+# test_queue_engine.py swaps these for spies; here the real ones run and write rows.
+
+
+def test_leave_is_recorded_in_history(user_client, session):
+    response = user_client.delete(MY_ENTRY, params=NORTHGATE)
+    assert response.status_code == 204, response.text
+    session.rollback()
+    history = user_client.get("/api/me/history", params=NORTHGATE).json()
+    # Jordan's seeded Advising visits were all served, so a "left" one there is new
+    left = [v for v in history if (v["serviceId"], v["outcome"]) == ("svc-advising", "left")]
+    assert len(left) == 1
+
+
+def test_dismissing_keeps_the_served_visit(login_as, session):
+    serve_front(session)
+    priya = login_as("u-2")
+    response = priya.delete(SERVED, params=NORTHGATE)
+    assert response.status_code == 204, response.text
+    session.rollback()
+    history = priya.get("/api/me/history", params=NORTHGATE).json()
+    # Priya has no seeded visits, so this one is the only one
+    assert [(v["serviceId"], v["outcome"]) for v in history] == [("svc-advising", "served")]
+    assert session.get(Service, "svc-advising").last_called_visit_id == history[0]["id"]
+
+
+def test_join_sends_a_joined_notification(login_as, session):
+    # Aisha has no seeded notifications (Jordan already has a "Joined Academic Advising")
+    aisha = login_as("u-6")
+    response = aisha.post(ADVISING)
+    assert response.status_code == 201, response.text
+    session.rollback()
+    wait = queue_engine.format_wait(wait_time.estimate_wait(6, session.get(Service, "svc-advising")))
+    message = f"You are 6th in line. Estimated wait is {wait}."
+    notes = aisha.get("/api/me/notifications", params=NORTHGATE).json()
+    assert [(n["type"], n["title"], n["message"], n["read"]) for n in notes] == [
+        ("queue_update", "Joined Academic Advising", message, False)
+    ]
