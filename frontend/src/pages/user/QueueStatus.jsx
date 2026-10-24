@@ -71,8 +71,17 @@ export default function QueueStatus() {
   }
 
   const service = getService(myEntry.serviceId)
-  // The services list is still loading.
-  if (!service) return header
+  // The entry arrives before the service list on a cold load.
+  if (!service) {
+    return (
+      <>
+        {header}
+        <Card>
+          <EmptyState icon={Timer} title="Loading your place in line" description="Fetching it from the server." />
+        </Card>
+      </>
+    )
+  }
   const line = queueLine?.entries ?? []
   const lineLength = queueLine?.length ?? service.queueLength
   const isServed = myEntry.status === 'served'
