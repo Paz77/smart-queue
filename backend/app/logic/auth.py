@@ -5,7 +5,7 @@ import secrets
 from sqlmodel import Session, select
 
 from app.errors import ApiError
-from app.models import AuthToken, User
+from app.models import AuthToken, User, UserProfile
 
 
 def hash_password(password: str) -> str:
@@ -31,14 +31,15 @@ def issue_token(session: Session, user: User) -> AuthToken:
     return auth_token
 
 
-def register(session: Session, name: str, email: str, password: str) -> tuple[User, AuthToken]:
-    """Create a visitor account and log them in."""
+def register(session: Session, name: str, email: str, password: str, phone: str | None = None) -> tuple[User, AuthToken]:
+    """Create a visitor account with its profile and log them in."""
     email = email.lower()
     if session.exec(select(User).where(User.email == email)).first():
         raise ApiError(409, "email_taken", "That email is already registered.", {"email": "Already registered."})
 
-    user = User(name=name, email=email, password_hash=hash_password(password))
+    user = User(email=email, password_hash=hash_password(password), profile=UserProfile(full_name=name, phone=phone))
     session.add(user)
+    session.flush()  # The token points at this user, so the user's row must exist first.
     return user, issue_token(session, user)
 
 

@@ -45,7 +45,8 @@ export function AuthProvider({ children }) {
   const login = useCallback((email, password) => signIn('/auth/login', { email, password }), [signIn])
 
   const register = useCallback(
-    ({ name, email, password }) => signIn('/auth/register', { name, email, password }),
+    ({ name, email, phone, password }) =>
+      signIn('/auth/register', { name, email, password, phone: phone.trim() || undefined }),
     [signIn],
   )
 

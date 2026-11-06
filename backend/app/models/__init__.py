@@ -10,7 +10,7 @@ from app.models.notification import Notification
 from app.models.organization import Organization
 from app.models.queue_entry import QueueEntry
 from app.models.service import Service
-from app.models.user import User
+from app.models.user import User, UserProfile
 from app.models.visit import Visit
 
-__all__ = ["AuthToken", "Notification", "Organization", "QueueEntry", "Service", "User", "Visit"]
+__all__ = ["AuthToken", "Notification", "Organization", "QueueEntry", "Service", "User", "UserProfile", "Visit"]

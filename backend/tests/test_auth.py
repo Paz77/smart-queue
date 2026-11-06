@@ -6,7 +6,7 @@ import hmac
 import pytest
 from sqlmodel import select
 
-from app.models import AuthToken, User
+from app.models import AuthToken, User, UserProfile
 
 
 @pytest.fixture
@@ -22,8 +22,10 @@ def credentials():
 def auth_state(session):
     """Snapshot values rather than mutable ORM instances."""
     users = session.exec(select(User).order_by(User.id)).all()
+    profiles = session.exec(select(UserProfile).order_by(UserProfile.user_id)).all()
     tokens = session.exec(select(AuthToken).order_by(AuthToken.token)).all()
-    return ([user.model_dump() for user in users], [token.model_dump() for token in tokens])
+    accounts = [user.model_dump() for user in users] + [profile.model_dump() for profile in profiles]
+    return (accounts, [token.model_dump() for token in tokens])
 
 
 def assert_error(response, status, field=None):
@@ -59,7 +61,8 @@ def assert_auth_response(response, session, status):
     assert stored_token.user_id == user["id"]
     stored_user = session.get(User, user["id"])
     assert stored_user is not None
-    assert user["name"] == stored_user.name
+    assert user["name"] == stored_user.profile.full_name
+    assert user["phone"] == stored_user.profile.phone
     assert user["email"] == stored_user.email
     assert user["role"] == stored_user.role
     assert user["organizationId"] == stored_user.organization_id
@@ -88,7 +91,7 @@ def test_valid_registration(client, session, registration):
     assert body["user"]["role"] == "user"
     assert body["user"]["organizationId"] is None
     users, tokens = auth_state(session)
-    assert len(users) == len(before_users) + 1
+    assert len(users) == len(before_users) + 2  # one user row and one profile row
     assert len(tokens) == len(before_tokens) + 1
 
 
@@ -256,7 +259,8 @@ def test_current_user(login_as, session, user_id):
     user = response.json()
     stored = session.get(User, user_id)
     assert user["id"] == stored.id
-    assert user["name"] == stored.name
+    assert user["name"] == stored.profile.full_name
+    assert user["phone"] == stored.profile.phone
     assert user["email"] == stored.email
     assert user["role"] == stored.role
     assert user["organizationId"] == stored.organization_id

@@ -5,12 +5,13 @@ import { AuthCard } from '../../components/AuthCard'
 import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
 import { useAuth } from '../../context/auth'
-import { isEmail, maxLength, minLength, required } from '../../utils/validation'
+import { isEmail, isPhone, maxLength, minLength, required } from '../../utils/validation'
 
 const NAME_MAX_LENGTH = 100
+const PHONE_MAX_LENGTH = 20
 const PASSWORD_MIN_LENGTH = 8
-const FIELDS = ['name', 'email', 'password', 'confirmPassword']
-const EMPTY = { name: '', email: '', password: '', confirmPassword: '' }
+const FIELDS = ['name', 'email', 'phone', 'password', 'confirmPassword']
+const EMPTY = { name: '', email: '', phone: '', password: '', confirmPassword: '' }
 
 export default function Register() {
   const { register } = useAuth()
@@ -30,6 +31,8 @@ export default function Register() {
         // Whether the email is already registered is only knowable server-side,
         // and comes back as a field error on submit.
         return required(value, 'Email') || isEmail(value)
+      case 'phone':
+        return value.trim() ? isPhone(value) : ''
       case 'password':
         return required(value, 'Password') || minLength(value, PASSWORD_MIN_LENGTH, 'Password')
       case 'confirmPassword':
@@ -113,6 +116,17 @@ export default function Register() {
           autoComplete="email"
           value={values.email}
           error={errors.email}
+          onChange={handleChange}
+          onBlur={handleBlur}
+        />
+        <TextField
+          label="Phone (optional)"
+          name="phone"
+          type="tel"
+          autoComplete="tel"
+          maxLength={PHONE_MAX_LENGTH}
+          value={values.phone}
+          error={errors.phone}
           onChange={handleChange}
           onBlur={handleBlur}
         />

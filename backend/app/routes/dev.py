@@ -11,14 +11,14 @@ from sqlmodel import Session, delete, select
 from app.db import get_session
 from app.errors import ApiError
 from app.logic.auth import issue_token
-from app.models import AuthToken, Notification, Organization, QueueEntry, Service, User, Visit
+from app.models import AuthToken, Notification, Organization, QueueEntry, Service, User, UserProfile, Visit
 from app.models.user import AuthResponse, UserPublic
 from app.seed import seed
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 
 # Cleared in this order so a row never outlives something it points at.
-TABLES = (AuthToken, Notification, Visit, QueueEntry, Service, User, Organization)
+TABLES = (AuthToken, Notification, Visit, QueueEntry, Service, UserProfile, User, Organization)
 
 
 @router.post("/reset", status_code=204)
@@ -43,11 +43,11 @@ def sign_in_as(user_id: str, session: Session = Depends(get_session)):
 
     auth_token = issue_token(session, user)
     session.commit()
-    return AuthResponse(user=UserPublic.model_validate(user), token=auth_token.token)
+    return AuthResponse(user=UserPublic.from_user(user), token=auth_token.token)
 
 
 @router.get("/users", response_model=list[UserPublic])
 def list_users(session: Session = Depends(get_session)):
     """Every account, so the Dev Tools panel can offer them to switch between."""
-    users = session.exec(select(User).order_by(User.name)).all()
-    return [UserPublic.model_validate(user) for user in users]
+    users = session.exec(select(User).join(UserProfile).order_by(UserProfile.full_name)).all()
+    return [UserPublic.from_user(user) for user in users]

@@ -10,7 +10,7 @@ import pytest
 
 from app.errors import ApiError
 from app.logic import history, notifications, queue_engine, wait_time
-from app.models import QueueEntry, Service, User, Visit
+from app.models import QueueEntry, Service, User, UserProfile, Visit
 from app.models.queue_entry import QueueEntryPublic
 
 ADVISING = "svc-advising"
@@ -59,7 +59,7 @@ def new_visitor(session):
     #A visitor in no line, so tests don't depend on which seed users are free
     # Flushed, not committed, so calling it mid-test never commits the engine's work.
     
-    user = User(name="Test Visitor", email=f"visitor-{uuid4().hex[:8]}@test.dev", password_hash="unused")
+    user = User(email=f"visitor-{uuid4().hex[:8]}@test.dev", password_hash="unused", profile=UserProfile(full_name="Test Visitor"))
     session.add(user)
     session.flush()
     return user

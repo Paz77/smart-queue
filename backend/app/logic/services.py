@@ -98,7 +98,7 @@ def admin_queue(session: Session, service: Service) -> AdminQueue:
     for entry in queue_engine.line(session, service.id):
         user = session.get(User, entry.user_id)
         wait = wait_time.estimate_wait(entry.position, service)
-        entries.append(AdminQueueEntry.model_validate(entry, update={"user_name": user.name, "estimated_wait": wait}))
+        entries.append(AdminQueueEntry.model_validate(entry, update={"user_name": user.profile.full_name, "estimated_wait": wait}))
     return AdminQueue(service=to_public(session, service), entries=entries, last_called=last_called(session, service))
 
 
@@ -110,4 +110,4 @@ def last_called(session: Session, service: Service) -> LastCalled | None:
     if visit is None or visit.served_at is None:
         return None
     user = session.get(User, visit.user_id)
-    return LastCalled(user_name=user.name, called_at=visit.served_at)
+    return LastCalled(user_name=user.profile.full_name, called_at=visit.served_at)

@@ -12,12 +12,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def auth_out(user: User, token: str) -> AuthResponse:
-    return AuthResponse(user=UserPublic.model_validate(user), token=token)
+    return AuthResponse(user=UserPublic.from_user(user), token=token)
 
 
 @router.post("/register", status_code=201, response_model=AuthResponse)
 def register(body: UserCreate, session: Session = Depends(get_session)):
-    user, auth_token = auth.register(session, body.name, body.email, body.password)
+    user, auth_token = auth.register(session, body.name, body.email, body.password, body.phone)
     session.commit()
     return auth_out(user, auth_token.token)
 
@@ -31,7 +31,7 @@ def login(body: UserLogin, session: Session = Depends(get_session)):
 
 @router.get("/me", response_model=UserPublic)
 def me(user: User = Depends(current_user)):
-    return UserPublic.model_validate(user)
+    return UserPublic.from_user(user)
 
 
 @router.post("/logout", status_code=204)

@@ -13,7 +13,7 @@ from functools import cache
 
 from sqlmodel import Session, select
 
-from app.models import Notification, Organization, QueueEntry, Service, User, Visit
+from app.models import Notification, Organization, QueueEntry, Service, User, UserProfile, Visit
 
 
 @cache
@@ -42,18 +42,19 @@ ORGANIZATIONS = [
     ("org-riverside", "Riverside Family Clinic", "Patient", "Patients", "/backdrops/riverside.jpg"),
 ]
 
+# id, name, email, password, role, organization, phone (optional)
 USERS = [
-    ("u-1", "Jordan Lee", "jordan@queuesmart.dev", "password123", "user", None),
-    ("u-2", "Priya Shah", "priya@queuesmart.dev", "password123", "user", None),
-    ("u-3", "Marcus Webb", "marcus@queuesmart.dev", "password123", "user", None),
-    ("u-4", "Elena Park", "elena@queuesmart.dev", "password123", "user", None),
-    ("u-5", "Sam Okafor", "sam@queuesmart.dev", "password123", "user", None),
-    ("u-6", "Aisha Rahman", "aisha@queuesmart.dev", "password123", "user", None),
-    ("u-7", "Tom Becker", "tom@queuesmart.dev", "password123", "user", None),
-    ("u-8", "Lucia Ferreira", "lucia@queuesmart.dev", "password123", "user", None),
-    ("u-9", "Noah Kim", "noah@queuesmart.dev", "password123", "user", None),
-    ("a-1", "Alex Rivera", "alex.rivera@queuesmart.dev", "admin123", "admin", "org-northgate"),
-    ("a-2", "Dana Brooks", "dana.brooks@queuesmart.dev", "admin123", "admin", "org-riverside"),
+    ("u-1", "Jordan Lee", "jordan@queuesmart.dev", "password123", "user", None, "(555) 010-0101"),
+    ("u-2", "Priya Shah", "priya@queuesmart.dev", "password123", "user", None, "(555) 010-0102"),
+    ("u-3", "Marcus Webb", "marcus@queuesmart.dev", "password123", "user", None, None),
+    ("u-4", "Elena Park", "elena@queuesmart.dev", "password123", "user", None, None),
+    ("u-5", "Sam Okafor", "sam@queuesmart.dev", "password123", "user", None, "(555) 010-0105"),
+    ("u-6", "Aisha Rahman", "aisha@queuesmart.dev", "password123", "user", None, None),
+    ("u-7", "Tom Becker", "tom@queuesmart.dev", "password123", "user", None, None),
+    ("u-8", "Lucia Ferreira", "lucia@queuesmart.dev", "password123", "user", None, None),
+    ("u-9", "Noah Kim", "noah@queuesmart.dev", "password123", "user", None, None),
+    ("a-1", "Alex Rivera", "alex.rivera@queuesmart.dev", "admin123", "admin", "org-northgate", "(555) 010-0201"),
+    ("a-2", "Dana Brooks", "dana.brooks@queuesmart.dev", "admin123", "admin", "org-riverside", "(555) 010-0202"),
 ]
 
 # id, organization, name, description, expected duration (minutes), priority, open
@@ -147,8 +148,15 @@ def seed(session: Session) -> None:
         for id, name, singular, plural, backdrop in ORGANIZATIONS
     )
     session.add_all(
-        User(id=id, name=name, email=email, password_hash=hash_password(password), role=role, organization_id=org)
-        for id, name, email, password, role, org in USERS
+        User(
+            id=id,
+            email=email,
+            password_hash=hash_password(password),
+            role=role,
+            organization_id=org,
+            profile=UserProfile(full_name=name, phone=phone),
+        )
+        for id, name, email, password, role, org, phone in USERS
     )
     session.add_all(
         Service(id=id, organization_id=org, name=name, description=description, expected_duration=duration, priority=priority, is_open=is_open)
