@@ -143,10 +143,12 @@ def seed(session: Session) -> None:
     if session.exec(select(Organization)).first():
         return
 
+    # Each flush writes a group before the rows that point at it, or the foreign keys reject them.
     session.add_all(
         Organization(id=id, name=name, person_singular=singular, person_plural=plural, backdrop_url=backdrop)
         for id, name, singular, plural, backdrop in ORGANIZATIONS
     )
+    session.flush()
     session.add_all(
         User(
             id=id,
@@ -158,10 +160,12 @@ def seed(session: Session) -> None:
         )
         for id, name, email, password, role, org, phone in USERS
     )
+    session.flush()
     session.add_all(
         Service(id=id, organization_id=org, name=name, description=description, expected_duration=duration, priority=priority, is_open=is_open)
         for id, org, name, description, duration, priority, is_open in SERVICES
     )
+    session.flush()
     session.add_all(
         QueueEntry(id=id, service_id=service, user_id=user, position=position, joined_at=minutes_ago(joined), status=status)
         for id, service, user, position, joined, status in QUEUE_ENTRIES
