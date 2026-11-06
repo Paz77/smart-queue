@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 import app.db
@@ -35,3 +36,9 @@ def test_requests_at_the_same_time(real_engine):
         statuses = list(pool.map(me, range(50)))
 
     assert statuses == [200] * 50
+
+
+def test_token_for_missing_user_is_rejected(session):
+    session.add(AuthToken(token="orphan-token", user_id="nonexistent-user"))
+    with pytest.raises(IntegrityError, match="FOREIGN KEY"):
+        session.commit()

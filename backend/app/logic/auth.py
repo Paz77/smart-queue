@@ -39,6 +39,7 @@ def register(session: Session, name: str, email: str, password: str) -> tuple[Us
 
     user = User(name=name, email=email, password_hash=hash_password(password))
     session.add(user)
+    session.flush()  # the token's foreign key needs the user row to exist first
     return user, issue_token(session, user)
 
 

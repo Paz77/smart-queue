@@ -7,6 +7,7 @@ into logic functions. Tests swap get_session for their own (see tests/conftest.p
 import threading
 from collections.abc import Iterator
 
+from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -28,7 +29,15 @@ def make_engine(url: str = DATABASE_URL):
     if url in ("sqlite://", "sqlite:///:memory:"):
         options["poolclass"] = StaticPool
 
-    return create_engine(url, **options)
+    sqlite_engine = create_engine(url, **options)
+
+    # SQLite ignores foreign keys unless each connection turns them on.
+    # Models have no relationship(), so the session won't order inserts: flush parents before children.
+    @event.listens_for(sqlite_engine, "connect")
+    def _enforce_foreign_keys(dbapi_connection, _record):
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    return sqlite_engine
 
 
 engine = make_engine()
