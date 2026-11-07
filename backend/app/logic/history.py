@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlmodel import Session, col, select
 
-from app.models import QueueEntry, Service, Visit
+from app.models import Queue, QueueEntry, Service, Visit
 
 # How a time in line ended. "served" is the only one that sets served_at.
 OUTCOMES = ("served", "left", "removed", "no_show")
@@ -24,7 +24,7 @@ def record_visit(session: Session, entry: QueueEntry, outcome: str, served_at: d
 
     visit = Visit(
         user_id=entry.user_id,
-        service_id=entry.service_id,
+        service_id=session.get(Queue, entry.queue_id).service_id,  # visits keep the service, not the queue
         joined_at=entry.joined_at,
         served_at=served_at if outcome == "served" else None,
         outcome=outcome,

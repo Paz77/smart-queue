@@ -24,7 +24,7 @@ def admin_service(session: Session, service_id: str, user: User) -> Service:
 
 def admin_entry(session: Session, entry_id: str, user: User) -> tuple[QueueEntry, Service]:
     entry = services.get_entry(session, entry_id)
-    service = admin_service(session, entry.service_id, user)
+    service = admin_service(session, queue_engine.service_of(session, entry).id, user)
     return entry, service
 
 

@@ -29,12 +29,19 @@ def is_open(session: Session, service: Service) -> bool:
     return queue_for(session, service).status == "open"
 
 
+def service_of(session: Session, entry: QueueEntry) -> Service:
+    """The service whose line this entry is in: entry -> queue -> service."""
+    queue = session.get(Queue, entry.queue_id)
+    return session.get(Service, queue.service_id)
+
+
 def join(session: Session, user: User, service: Service, priority: str = "normal") -> QueueEntry:
     """Add the user to the service's line and return their new entry"""
     if user.role == "admin":
         raise ApiError(403, "forbidden", "Admins can't join a line.")
     _check_priority(priority)
-    if not is_open(session, service):
+    queue = queue_for(session, service)
+    if queue.status != "open":
         raise ApiError(409, "service_closed", f"{service.name} is closed right now.")
     if _active_entry(session, user.id, service.organization_id) is not None:
         raise ApiError(409, "already_in_line", "You're already in a line here. Leave it before joining another.")
@@ -43,7 +50,7 @@ def join(session: Session, user: User, service: Service, priority: str = "normal
     current = line(session, service.id)
     before = notifications.snapshot_positions(session, service.id)
     entry = QueueEntry(
-        service_id=service.id,
+        queue_id=queue.id,
         user_id=user.id,
         priority=priority,
         position=join_position(current, priority),  # set before session.add: position can't be empty
@@ -70,7 +77,7 @@ def leave(session: Session, user: User, organization_id: str) -> None:
     entry = _active_entry(session, user.id, organization_id)
     if entry is None:
         raise ApiError(404, "not_in_line", "You aren't in a line here.")
-    service = session.get(Service, entry.service_id)
+    service = service_of(session, entry)
     _take_out(session, service, entry, "left", f"Left {service.name}", "You gave up your place in line.")
 
 
@@ -85,7 +92,7 @@ def serve_next(session: Session, service: Service) -> QueueEntry:
 def serve_entry(session: Session, entry: QueueEntry) -> QueueEntry:
     """Serve this specific entry and return it."""
     _check_in_line(entry)
-    service = session.get(Service, entry.service_id)
+    service = service_of(session, entry)
     current = line(session, service.id)
     before = notifications.snapshot_positions(session, service.id)
 
@@ -112,7 +119,7 @@ def serve_entry(session: Session, entry: QueueEntry) -> QueueEntry:
 def move(session: Session, entry: QueueEntry, position: int) -> None:
     """Move the entry to a new position in its line"""
     _check_in_line(entry)
-    service = session.get(Service, entry.service_id)
+    service = service_of(session, entry)
     current = line(session, service.id)
     index = _index_of(current, entry)
     target = min(max(position, 1), len(current))
@@ -129,7 +136,7 @@ def move(session: Session, entry: QueueEntry, position: int) -> None:
 def remove(session: Session, entry: QueueEntry) -> None:
     """Remove the entry from its line"""
     _check_in_line(entry)
-    service = session.get(Service, entry.service_id)
+    service = service_of(session, entry)
     _take_out(session, service, entry, "removed", f"Removed from {service.name}", "Staff took you out of the line.")
 
 
@@ -140,7 +147,7 @@ def set_priority(session: Session, entry: QueueEntry, priority: str) -> None:
     if priority == entry.priority:
         return
 
-    service = session.get(Service, entry.service_id)
+    service = service_of(session, entry)
     current = line(session, service.id)
     before = notifications.snapshot_positions(session, service.id)
     index = _index_of(current, entry)
@@ -160,7 +167,8 @@ def line(session: Session, service_id: str) -> list[QueueEntry]:
     """The service's waiting entries, front of the line first"""
     statement = (
         select(QueueEntry)
-        .where(QueueEntry.service_id == service_id, QueueEntry.status != "served")
+        .join(Queue, col(QueueEntry.queue_id) == col(Queue.id))
+        .where(Queue.service_id == service_id, QueueEntry.status != "served")
         .order_by(col(QueueEntry.position), col(QueueEntry.joined_at))
     )
     return list(session.exec(statement).all())
@@ -230,10 +238,11 @@ def _index_of(entries: list[QueueEntry], entry: QueueEntry) -> int:
 
 
 def _in_organization(user_id: str, organization_id: str):
-    """A query for this user's entries in any of the organization's lines"""
+    """A query for this user's entries in any of the organization's lines (entry -> queue -> service)"""
     return (
         select(QueueEntry)
-        .join(Service, col(QueueEntry.service_id) == col(Service.id))
+        .join(Queue, col(QueueEntry.queue_id) == col(Queue.id))
+        .join(Service, col(Queue.service_id) == col(Service.id))
         .where(QueueEntry.user_id == user_id, Service.organization_id == organization_id)
     )
 

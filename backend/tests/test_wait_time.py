@@ -6,11 +6,10 @@ check the numbers the UI actually shows.
 """
 
 import pytest
-from sqlmodel import select
 
 from app.logic import queue_engine
 from app.logic.wait_time import estimate_wait
-from app.models import QueueEntry, Service
+from app.models import Service
 
 
 def service(expected_duration: int) -> Service:
@@ -66,7 +65,7 @@ def test_returns_a_whole_number_of_minutes():
 def test_quote_for_someone_about_to_join(session):
     """The wait quoted before joining counts the line plus the joiner's own turn."""
     advising = session.get(Service, "svc-advising")  # 15 min per person
-    waiting = len(session.exec(select(QueueEntry).where(QueueEntry.service_id == "svc-advising")).all())
+    waiting = len(queue_engine.line(session, "svc-advising"))
 
     assert estimate_wait(waiting + 1, advising) == (waiting + 1) * 15
 

@@ -24,9 +24,9 @@ def check_organization(session: Session, organization_id: str) -> None:
 
 
 def entry_out(session: Session, entry: QueueEntry) -> QueueEntryPublic:
-    service = session.get(Service, entry.service_id)
+    service = queue_engine.service_of(session, entry)
     wait = wait_time.estimate_wait(entry.position, service)
-    return QueueEntryPublic.model_validate(entry, update={"estimated_wait": wait})
+    return QueueEntryPublic.model_validate(entry, update={"service_id": service.id, "estimated_wait": wait})
 
 
 @router.get("/services/{service_id}/queue", response_model=QueueLine)

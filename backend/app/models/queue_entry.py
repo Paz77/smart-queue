@@ -9,7 +9,7 @@ from sqlmodel import Field, SQLModel
 
 class QueueEntry(SQLModel, table=True):
     id: str = Field(default_factory=lambda: f"q-{uuid4().hex[:8]}", primary_key=True)
-    service_id: str = Field(foreign_key="service.id", index=True)
+    queue_id: str = Field(foreign_key="queue.id", index=True)  # the line this entry is in; the queue points at the service
     user_id: str = Field(foreign_key="user.id", index=True)
     priority: str = "normal"  # "normal" or "priority"
     position: int  # 1 is the front of the line
@@ -28,7 +28,7 @@ class QueueEntryPublic(SQLModel):
     model_config = ConfigDict(alias_generator=to_camel, validate_by_name=True)
 
     id: str
-    service_id: str
+    service_id: str  # looked up through the entry's queue
     priority: str
     position: int
     status: str

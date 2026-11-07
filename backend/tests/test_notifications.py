@@ -155,7 +155,7 @@ def test_new_arrivals_are_skipped(session):
     service = session.get(Service, "svc-advising")
     before = snapshot_positions(session, "svc-advising")
 
-    session.add(QueueEntry(id="q-new", service_id="svc-advising", user_id="u-5", position=99, status="waiting"))
+    session.add(QueueEntry(id="q-new", queue_id="queue-advising", user_id="u-5", position=99, status="waiting"))
     session.commit()
 
     count_before = len(session.exec(select(Notification)).all())

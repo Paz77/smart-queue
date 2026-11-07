@@ -32,6 +32,11 @@ def minutes_ago(minutes: int) -> datetime:
     return datetime.now(timezone.utc) - timedelta(minutes=minutes)
 
 
+def queue_id(service_id: str) -> str:
+    """Each sample service has one queue, named after it: svc-advising -> queue-advising."""
+    return service_id.replace("svc-", "queue-", 1)
+
+
 def local(timestamp: str) -> datetime:
     """A mock timestamp like "2026-09-23T14:05:00" (local time), converted to UTC."""
     return datetime.fromisoformat(timestamp).astimezone(timezone.utc)
@@ -73,7 +78,8 @@ SERVICES = [
     ("svc-pt", "org-riverside", "Physical Therapy Intake", "First assessment for new physical therapy patients.", 25, "low", False),
 ]
 
-# id, service, user, position, joined (minutes ago), status. The mocks have no priority, so all are "normal".
+# id, service (the entry goes in that service's queue), user, position, joined (minutes ago), status.
+# The mocks have no priority, so all are "normal".
 QUEUE_ENTRIES = [
     # Northgate Student Services
     ("q-1", "svc-advising", "u-2", 1, 41, "almost_ready"),
@@ -166,14 +172,13 @@ def seed(session: Session) -> None:
         for id, org, name, description, duration, priority, _is_open in SERVICES
     )
     session.flush()
-    # One queue per service: svc-advising gets queue-advising.
     session.add_all(
-        Queue(id=id.replace("svc-", "queue-", 1), service_id=id, status="open" if is_open else "closed")
+        Queue(id=queue_id(id), service_id=id, status="open" if is_open else "closed")
         for id, _org, _name, _description, _duration, _priority, is_open in SERVICES
     )
     session.flush()
     session.add_all(
-        QueueEntry(id=id, service_id=service, user_id=user, position=position, joined_at=minutes_ago(joined), status=status)
+        QueueEntry(id=id, queue_id=queue_id(service), user_id=user, position=position, joined_at=minutes_ago(joined), status=status)
         for id, service, user, position, joined, status in QUEUE_ENTRIES
     )
     session.add_all(
