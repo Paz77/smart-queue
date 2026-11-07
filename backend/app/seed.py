@@ -13,7 +13,7 @@ from functools import cache
 
 from sqlmodel import Session, select
 
-from app.models import Notification, Organization, QueueEntry, Service, User, UserProfile, Visit
+from app.models import Notification, Organization, Queue, QueueEntry, Service, User, UserProfile, Visit
 
 
 @cache
@@ -164,6 +164,12 @@ def seed(session: Session) -> None:
     session.add_all(
         Service(id=id, organization_id=org, name=name, description=description, expected_duration=duration, priority=priority, is_open=is_open)
         for id, org, name, description, duration, priority, is_open in SERVICES
+    )
+    session.flush()
+    # One queue per service: svc-advising gets queue-advising.
+    session.add_all(
+        Queue(id=id.replace("svc-", "queue-", 1), service_id=id, status="open" if is_open else "closed")
+        for id, _org, _name, _description, _duration, _priority, is_open in SERVICES
     )
     session.flush()
     session.add_all(

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlmodel import select
 
-from app.models import Notification, QueueEntry, User, Visit
+from app.models import Notification, Queue, QueueEntry, User, Visit
 
 
 def test_reset_puts_the_sample_data_back(client, session):
@@ -36,7 +36,7 @@ def test_reset_clears_rows_added_during_the_demo(client, session):
 def test_reset_restores_every_table(client, session):
     client.post("/api/dev/reset")
 
-    for table in (User, QueueEntry, Visit, Notification):
+    for table in (User, Queue, QueueEntry, Visit, Notification):
         assert session.exec(select(table)).first() is not None, f"{table.__name__} came back empty"
 
 

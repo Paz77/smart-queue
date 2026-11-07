@@ -8,7 +8,7 @@ from sqlmodel import Session, col, select
 
 from app.errors import ApiError
 from app.logic import notifications, queue_engine, wait_time
-from app.models import Organization, QueueEntry, Service, User, Visit
+from app.models import Organization, Queue, QueueEntry, Service, User, Visit
 from app.models.service import (
     AdminQueue,
     AdminQueueEntry,
@@ -48,10 +48,12 @@ def list_services(session: Session, organization_id: str) -> list[Service]:
 
 
 def create_service(session: Session, organization_id: str, data: ServiceCreate) -> Service:
-    """Add a service. It starts closed; the admin opens it when ready."""
+    """Add a service and its queue. Both start closed; the admin opens it when ready."""
     get_organization(session, organization_id)
     service = Service(organization_id=organization_id, is_open=False, **data.model_dump())
     session.add(service)
+    session.flush()  # write the service first, or the queue's foreign key rejects it
+    session.add(Queue(service_id=service.id, status="closed"))
     return service
 
 
