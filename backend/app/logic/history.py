@@ -3,9 +3,7 @@ from datetime import datetime
 from sqlmodel import Session, col, select
 
 from app.models import Queue, QueueEntry, Service, Visit
-
-# How a time in line ended. "served" is the only one that sets served_at.
-OUTCOMES = ("served", "left", "removed", "no_show")
+from app.models.visit import OUTCOMES
 
 
 def record_visit(session: Session, entry: QueueEntry, outcome: str, served_at: datetime | None = None) -> Visit | None:

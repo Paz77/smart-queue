@@ -6,15 +6,25 @@ from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 from sqlmodel import Field, SQLModel
 
+from app.models.checks import one_of
+
+ENTRY_STATUSES = ("waiting", "almost_ready", "served")
+PRIORITIES = ("normal", "priority")
+
 
 class QueueEntry(SQLModel, table=True):
+    __table_args__ = (
+        one_of("queueentry", "status", ENTRY_STATUSES),
+        one_of("queueentry", "priority", PRIORITIES),
+    )
+
     id: str = Field(default_factory=lambda: f"q-{uuid4().hex[:8]}", primary_key=True)
     queue_id: str = Field(foreign_key="queue.id", index=True)  # the line this entry is in; the queue points at the service
     user_id: str = Field(foreign_key="user.id", index=True)
-    priority: str = "normal"  # "normal" or "priority"
+    priority: str = "normal"  # one of PRIORITIES
     position: int  # 1 is the front of the line
     joined_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    status: str = "waiting"  # "waiting", "almost_ready" or "served"
+    status: str = "waiting"  # one of ENTRY_STATUSES
     served_at: datetime | None = None  # set when status becomes "served"
 
 
