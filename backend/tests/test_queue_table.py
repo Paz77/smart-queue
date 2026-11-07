@@ -6,7 +6,8 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from app.models import Queue, Service
+from app.logic import queue_engine
+from app.models import Queue, QueueEntry, Service
 from app.seed import SERVICES
 
 
@@ -85,3 +86,37 @@ def test_opening_or_closing_a_service_sets_its_queue_status(admin_client, sessio
 
     session.expire_all()
     assert queue_of(session, service_id).status == status
+
+
+# --- entries belong to a queue, and the database holds the links together
+
+
+def test_entry_table_points_at_a_queue_not_a_service():
+    columns = QueueEntry.__table__.columns
+    assert "service_id" not in columns
+    assert [key.target_fullname for key in columns["queue_id"].foreign_keys] == ["queue.id"]
+
+
+def test_an_entry_is_found_through_its_queue(session):
+    entry = session.get(QueueEntry, "q-6")  # in Financial Aid's line
+    assert entry.queue_id == "queue-finaid"
+    assert queue_engine.service_of(session, entry).id == "svc-finaid"
+
+
+def test_entry_for_missing_queue_is_rejected(session):
+    session.add(QueueEntry(queue_id="queue-does-not-exist", user_id="u-6", position=1))
+    with pytest.raises(IntegrityError, match="FOREIGN KEY"):
+        session.commit()
+
+
+def test_a_queue_with_people_in_it_cannot_be_deleted(session):
+    session.delete(session.get(Queue, "queue-advising"))  # five people are in this line
+    with pytest.raises(IntegrityError, match="FOREIGN KEY"):
+        session.commit()
+
+
+def test_a_service_with_a_queue_cannot_be_deleted(session):
+    # Physical Therapy Intake: nobody in line and no past visits, so only its queue points at it.
+    session.delete(session.get(Service, "svc-pt"))
+    with pytest.raises(IntegrityError, match="FOREIGN KEY"):
+        session.commit()
