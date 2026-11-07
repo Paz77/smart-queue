@@ -42,7 +42,7 @@ def view_line(
     spots = [QueueSpot(id=e.id, position=e.position, status=e.status, is_me=e.user_id == user.id) for e in current]
     return QueueLine(
         service_id=service.id,
-        is_open=service.is_open,
+        is_open=queue_engine.is_open(session, service),
         length=len(current),
         entries=spots,
         join_position=normal_position,

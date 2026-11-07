@@ -68,3 +68,20 @@ def test_creating_a_service_creates_a_closed_queue(admin_client, session):
 
     queue = queue_of(session, response.json()["id"])
     assert queue.status == "closed"
+
+
+# --- open/closed lives on the queue
+
+
+def test_service_table_has_no_open_column():
+    assert "is_open" not in Service.__table__.columns
+
+
+@pytest.mark.parametrize(("service_id", "is_open", "status"), [("svc-advising", False, "closed"), ("svc-career", True, "open")])
+def test_opening_or_closing_a_service_sets_its_queue_status(admin_client, session, service_id, is_open, status):
+    response = admin_client.patch(f"/api/services/{service_id}", json={"isOpen": is_open})
+    assert response.status_code == 200, response.text
+    assert response.json()["isOpen"] is is_open
+
+    session.expire_all()
+    assert queue_of(session, service_id).status == status

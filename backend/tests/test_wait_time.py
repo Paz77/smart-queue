@@ -8,6 +8,7 @@ check the numbers the UI actually shows.
 import pytest
 from sqlmodel import select
 
+from app.logic import queue_engine
 from app.logic.wait_time import estimate_wait
 from app.models import QueueEntry, Service
 
@@ -90,5 +91,5 @@ def test_closed_service_still_estimates(session):
     """Whether a queue is open is a separate question from how long it would take;
     the callers decide whether to show the number."""
     career = session.get(Service, "svc-career")  # closed, 25 min
-    assert career.is_open is False
+    assert queue_engine.is_open(session, career) is False
     assert estimate_wait(2, career) == 50

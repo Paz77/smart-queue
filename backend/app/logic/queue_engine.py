@@ -13,10 +13,20 @@ from sqlmodel import Session, col, select
 
 from app.errors import ApiError
 from app.logic import history, notifications, wait_time
-from app.models import QueueEntry, Service, User
+from app.models import Queue, QueueEntry, Service, User
 
 PRIORITIES = ("normal", "priority")
 ALMOST_READY_WITHIN = 2  # the next two people to be called
+
+
+def queue_for(session: Session, service: Service) -> Queue:
+    """The service's queue. Every service has exactly one, made with it (see services.create_service)."""
+    return session.exec(select(Queue).where(Queue.service_id == service.id)).one()
+
+
+def is_open(session: Session, service: Service) -> bool:
+    """Whether people can join the service's line right now."""
+    return queue_for(session, service).status == "open"
 
 
 def join(session: Session, user: User, service: Service, priority: str = "normal") -> QueueEntry:
@@ -24,7 +34,7 @@ def join(session: Session, user: User, service: Service, priority: str = "normal
     if user.role == "admin":
         raise ApiError(403, "forbidden", "Admins can't join a line.")
     _check_priority(priority)
-    if not service.is_open:
+    if not is_open(session, service):
         raise ApiError(409, "service_closed", f"{service.name} is closed right now.")
     if _active_entry(session, user.id, service.organization_id) is not None:
         raise ApiError(409, "already_in_line", "You're already in a line here. Leave it before joining another.")

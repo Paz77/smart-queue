@@ -57,7 +57,7 @@ USERS = [
     ("a-2", "Dana Brooks", "dana.brooks@queuesmart.dev", "admin123", "admin", "org-riverside", "(555) 010-0202"),
 ]
 
-# id, organization, name, description, expected duration (minutes), priority, open
+# id, organization, name, description, expected duration (minutes), priority, open (becomes the queue's status)
 SERVICES = [
     # Northgate Student Services
     ("svc-advising", "org-northgate", "Academic Advising", "Course planning, degree audits and registration holds.", 15, "high", True),
@@ -162,8 +162,8 @@ def seed(session: Session) -> None:
     )
     session.flush()
     session.add_all(
-        Service(id=id, organization_id=org, name=name, description=description, expected_duration=duration, priority=priority, is_open=is_open)
-        for id, org, name, description, duration, priority, is_open in SERVICES
+        Service(id=id, organization_id=org, name=name, description=description, expected_duration=duration, priority=priority)
+        for id, org, name, description, duration, priority, _is_open in SERVICES
     )
     session.flush()
     # One queue per service: svc-advising gets queue-advising.
