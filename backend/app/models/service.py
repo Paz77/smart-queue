@@ -6,14 +6,20 @@ from pydantic import ConfigDict, model_validator
 from pydantic.alias_generators import to_camel
 from sqlmodel import Field, SQLModel
 
+from app.models.checks import one_of
+
+SERVICE_PRIORITIES = ("low", "medium", "high")
+
 
 class Service(SQLModel, table=True):
+    __table_args__ = (one_of("service", "priority", SERVICE_PRIORITIES),)
+
     id: str = Field(default_factory=lambda: f"svc-{uuid4().hex[:8]}", primary_key=True)
     organization_id: str = Field(foreign_key="organization.id", index=True)
     name: str
     description: str
     expected_duration: int  # minutes per person
-    priority: str = "medium"  # "low", "medium" or "high"
+    priority: str = "medium"  # one of SERVICE_PRIORITIES
     # Open or closed lives on the service's Queue (queue.status), not here.
 
     # The Visit of the last person called. A plain column, not a foreign key:

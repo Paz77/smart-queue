@@ -5,6 +5,8 @@ from pydantic import ConfigDict, EmailStr, field_validator
 from pydantic.alias_generators import to_camel
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models.checks import one_of
+
 NAME_MAX_LENGTH = 100
 PHONE_MAX_LENGTH = 20
 PREFERENCES_MAX_LENGTH = 500
@@ -13,14 +15,18 @@ PHONE_PATTERN = re.compile(r"\+?[0-9 ().-]+")
 PHONE_MIN_DIGITS = 7
 PHONE_MAX_DIGITS = 15
 
+ROLES = ("user", "admin")
+
 
 class User(SQLModel, table=True):
     """Login credentials (the assignment's UserCredentials). Personal details live on UserProfile."""
 
+    __table_args__ = (one_of("user", "role", ROLES),)
+
     id: str = Field(default_factory=lambda: f"u-{uuid4().hex[:8]}", primary_key=True)
     email: str = Field(unique=True, index=True)
     password_hash: str
-    role: str = "user"  # "user" or "admin"
+    role: str = "user"  # one of ROLES
     organization_id: str | None = Field(default=None, foreign_key="organization.id")  # admins only
 
     profile: "UserProfile" = Relationship(back_populates="user")

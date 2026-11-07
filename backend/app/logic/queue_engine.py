@@ -14,8 +14,8 @@ from sqlmodel import Session, col, select
 from app.errors import ApiError
 from app.logic import history, notifications, wait_time
 from app.models import Queue, QueueEntry, Service, User
+from app.models.queue_entry import PRIORITIES
 
-PRIORITIES = ("normal", "priority")
 ALMOST_READY_WITHIN = 2  # the next two people to be called
 
 
