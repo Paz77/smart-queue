@@ -8,9 +8,10 @@ must be added here too. Elsewhere, import models from here:
 from app.models.auth_token import AuthToken
 from app.models.notification import Notification
 from app.models.organization import Organization
+from app.models.queue import Queue
 from app.models.queue_entry import QueueEntry
 from app.models.service import Service
 from app.models.user import User, UserProfile
 from app.models.visit import Visit
 
-__all__ = ["AuthToken", "Notification", "Organization", "QueueEntry", "Service", "User", "UserProfile", "Visit"]
+__all__ = ["AuthToken", "Notification", "Organization", "Queue", "QueueEntry", "Service", "User", "UserProfile", "Visit"]
