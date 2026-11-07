@@ -53,6 +53,14 @@ python -m app.main
 
 All other visitors in `app/seed.py` also use `password123`.
 
+### After pulling a change to the tables
+
+If a pull changes the table classes in `app/models/` (for example, adding the `queue` table), delete `backend/queuesmart.db` and restart the server. On startup the server only creates tables that are missing; it never changes ones that already exist, so an old file makes most requests fail with a 500 error. The `/dev/reset` endpoint can't fix this either. Deleting the file loses nothing important: the sample data is loaded again on startup.
+
+```sh
+rm backend/queuesmart.db
+```
+
 ### Run the tests
 
 From `backend/`:
@@ -123,11 +131,11 @@ class ServicePublic(SQLModel):  # what the API returns
 ### Using the database
 
 ```python
-# app/logic/services.py
-def set_open(session: Session, service: Service, is_open: bool) -> Service:
-    service.is_open = is_open
-    session.add(service)
-    return service
+# app/logic/services.py (simplified)
+def set_open(session: Session, service: Service, is_open: bool) -> None:
+    queue = queue_engine.queue_for(session, service)  # open/closed lives on the service's Queue
+    queue.status = "open" if is_open else "closed"
+    session.add(queue)
 
 
 # app/routes/services.py
@@ -144,7 +152,7 @@ def update(
     require_admin(service.organization_id, user)
     services.set_open(session, service, body.is_open)
     session.commit()
-    return ServicePublic.model_validate(service)
+    return services.to_public(session, service)  # adds isOpen, queueLength and estimatedWait
 ```
 
 - **Logic functions take `session` first and never commit.** The route commits once at the end, so a request saves everything or nothing.

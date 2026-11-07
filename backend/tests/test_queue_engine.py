@@ -82,7 +82,7 @@ def calls(monkeypatch):
         # Never added to the session, so it doesn't reach the database.
         recorded.last_visit = Visit(
             user_id=entry.user_id,
-            service_id=entry.service_id,
+            service_id=queue_engine.service_of(session, entry).id,
             joined_at=entry.joined_at,
             served_at=served_at,
             outcome=outcome,
@@ -260,7 +260,7 @@ def test_served_at_comes_back_from_the_database_in_utc(session):
 
 def test_public_schema_is_camel_case_with_utc_times(session):
     entry = session.get(QueueEntry, "q-4")
-    data = QueueEntryPublic.model_validate(entry, update={"estimated_wait": 7}).model_dump(mode="json", by_alias=True)
+    data = QueueEntryPublic.model_validate(entry, update={"service_id": "svc-advising", "estimated_wait": 7}).model_dump(mode="json", by_alias=True)
     assert set(data) == {"id", "serviceId", "priority", "position", "status", "joinedAt", "servedAt", "estimatedWait"}
     assert data["joinedAt"].endswith("Z")
     assert data["servedAt"] is None

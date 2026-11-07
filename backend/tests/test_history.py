@@ -7,12 +7,13 @@ from sqlmodel import select
 
 from app.logic.history import list_for_user, record_visit
 from app.models import QueueEntry, Visit
+from app.seed import queue_id
 
 
 def entry(session, service_id="svc-advising", user_id="u-1", position=1) -> QueueEntry:
-    """A queue entry to record a visit from."""
+    """A queue entry to record a visit from, in that service's queue."""
     row = QueueEntry(
-        service_id=service_id,
+        queue_id=queue_id(service_id),
         user_id=user_id,
         position=position,
         joined_at=datetime.now(timezone.utc) - timedelta(minutes=30),

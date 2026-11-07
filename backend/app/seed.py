@@ -13,7 +13,7 @@ from functools import cache
 
 from sqlmodel import Session, select
 
-from app.models import Notification, Organization, QueueEntry, Service, User, UserProfile, Visit
+from app.models import Notification, Organization, Queue, QueueEntry, Service, User, UserProfile, Visit
 
 
 @cache
@@ -30,6 +30,11 @@ def hash_password(password: str) -> str:
 
 def minutes_ago(minutes: int) -> datetime:
     return datetime.now(timezone.utc) - timedelta(minutes=minutes)
+
+
+def queue_id(service_id: str) -> str:
+    """Each sample service has one queue, named after it: svc-advising -> queue-advising."""
+    return service_id.replace("svc-", "queue-", 1)
 
 
 def local(timestamp: str) -> datetime:
@@ -57,7 +62,7 @@ USERS = [
     ("a-2", "Dana Brooks", "dana.brooks@queuesmart.dev", "admin123", "admin", "org-riverside", "(555) 010-0202"),
 ]
 
-# id, organization, name, description, expected duration (minutes), priority, open
+# id, organization, name, description, expected duration (minutes), priority, open (becomes the queue's status)
 SERVICES = [
     # Northgate Student Services
     ("svc-advising", "org-northgate", "Academic Advising", "Course planning, degree audits and registration holds.", 15, "high", True),
@@ -73,7 +78,8 @@ SERVICES = [
     ("svc-pt", "org-riverside", "Physical Therapy Intake", "First assessment for new physical therapy patients.", 25, "low", False),
 ]
 
-# id, service, user, position, joined (minutes ago), status. The mocks have no priority, so all are "normal".
+# id, service (the entry goes in that service's queue), user, position, joined (minutes ago), status.
+# The mocks have no priority, so all are "normal".
 QUEUE_ENTRIES = [
     # Northgate Student Services
     ("q-1", "svc-advising", "u-2", 1, 41, "almost_ready"),
@@ -162,12 +168,17 @@ def seed(session: Session) -> None:
     )
     session.flush()
     session.add_all(
-        Service(id=id, organization_id=org, name=name, description=description, expected_duration=duration, priority=priority, is_open=is_open)
-        for id, org, name, description, duration, priority, is_open in SERVICES
+        Service(id=id, organization_id=org, name=name, description=description, expected_duration=duration, priority=priority)
+        for id, org, name, description, duration, priority, _is_open in SERVICES
     )
     session.flush()
     session.add_all(
-        QueueEntry(id=id, service_id=service, user_id=user, position=position, joined_at=minutes_ago(joined), status=status)
+        Queue(id=queue_id(id), service_id=id, status="open" if is_open else "closed")
+        for id, _org, _name, _description, _duration, _priority, is_open in SERVICES
+    )
+    session.flush()
+    session.add_all(
+        QueueEntry(id=id, queue_id=queue_id(service), user_id=user, position=position, joined_at=minutes_ago(joined), status=status)
         for id, service, user, position, joined, status in QUEUE_ENTRIES
     )
     session.add_all(

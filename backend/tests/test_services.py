@@ -3,7 +3,7 @@
 import pytest
 from sqlmodel import select
 
-from app.logic import services
+from app.logic import queue_engine, services
 from app.models import Notification, Service
 
 NORTHGATE_SERVICES = "/api/organizations/org-northgate/services"
@@ -173,7 +173,8 @@ def test_update_rejects_bad_fields(admin_client, session, field, value):
     assert_error(admin_client.patch(ADVISING, json={field: value}), 422, "validation_error", field)
     session.expire_all()
     service = session.get(Service, "svc-advising")
-    assert (service.name, service.expected_duration, service.is_open) == ("Academic Advising", 15, True)
+    assert (service.name, service.expected_duration) == ("Academic Advising", 15)
+    assert queue_engine.is_open(session, service) is True
 
 
 @pytest.mark.parametrize(
@@ -221,5 +222,5 @@ def test_set_open_on_an_empty_line_notifies_nobody(session):
     registrar = session.get(Service, "svc-registrar")
     before = len(session.exec(select(Notification)).all())
     services.set_open(session, registrar, False)
-    assert registrar.is_open is False
+    assert queue_engine.is_open(session, registrar) is False
     assert len(session.exec(select(Notification)).all()) == before

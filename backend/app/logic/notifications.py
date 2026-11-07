@@ -1,7 +1,7 @@
 from sqlmodel import Session, col, select
 
 from app.errors import ApiError
-from app.models import Notification, QueueEntry, Service
+from app.models import Notification, Queue, QueueEntry, Service
 
 # Someone is "almost ready" once they are one of the next two to be called.
 # Mirrors the rule the queue engine uses when it sets QueueEntry.status.
@@ -42,8 +42,7 @@ def announce_line_changes(session: Session, service: Service, before_positions: 
     before that function exists. Both order by position, so the result is the same.
     """
     statement = (
-        select(QueueEntry)
-        .where(QueueEntry.service_id == service.id, QueueEntry.status != "served")
+        _waiting_at(service.id)
         .order_by(col(QueueEntry.position))
     )
 
@@ -75,8 +74,16 @@ def announce_line_changes(session: Session, service: Service, before_positions: 
 
 def snapshot_positions(session: Session, service_id: str) -> dict[str, int]:
     """Current positions, for the engine to pass back into announce_line_changes."""
-    statement = select(QueueEntry).where(QueueEntry.service_id == service_id, QueueEntry.status != "served")
-    return {entry.id: entry.position for entry in session.exec(statement).all()}
+    return {entry.id: entry.position for entry in session.exec(_waiting_at(service_id)).all()}
+
+
+def _waiting_at(service_id: str):
+    """A query for the entries still in the service's line. Entries point at a queue, and the queue at the service."""
+    return (
+        select(QueueEntry)
+        .join(Queue, col(QueueEntry.queue_id) == col(Queue.id))
+        .where(Queue.service_id == service_id, QueueEntry.status != "served")
+    )
 
 
 def list_for_user(session: Session, user_id: str, organization_id: str) -> list[Notification]:

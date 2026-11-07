@@ -14,7 +14,7 @@ class Service(SQLModel, table=True):
     description: str
     expected_duration: int  # minutes per person
     priority: str = "medium"  # "low", "medium" or "high"
-    is_open: bool = False  # new services start closed
+    # Open or closed lives on the service's Queue (queue.status), not here.
 
     # The Visit of the last person called. A plain column, not a foreign key:
     # Visit already points at Service, and keys in both directions make table creation circular.
@@ -41,7 +41,7 @@ class ServiceUpdate(SQLModel):
     description: str | None = Field(default=None, min_length=1, max_length=500)
     expected_duration: int | None = Field(default=None, ge=1, le=480)
     priority: Literal["low", "medium", "high"] | None = None
-    is_open: bool | None = None
+    is_open: bool | None = None  # sets the queue's status, see services.set_open
 
 
 class ServicePublic(SQLModel):
@@ -53,7 +53,7 @@ class ServicePublic(SQLModel):
     description: str
     expected_duration: int
     priority: str
-    is_open: bool
+    is_open: bool  # from the queue's status
     queue_length: int  # people waiting now
     estimated_wait: int  # minutes, for someone joining now
 

@@ -11,14 +11,14 @@ from sqlmodel import Session, delete, select
 from app.db import get_session
 from app.errors import ApiError
 from app.logic.auth import issue_token
-from app.models import AuthToken, Notification, Organization, QueueEntry, Service, User, UserProfile, Visit
+from app.models import AuthToken, Notification, Organization, Queue, QueueEntry, Service, User, UserProfile, Visit
 from app.models.user import AuthResponse, UserPublic
 from app.seed import seed
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 
 # Cleared in this order so a row never outlives something it points at.
-TABLES = (AuthToken, Notification, Visit, QueueEntry, Service, UserProfile, User, Organization)
+TABLES = (AuthToken, Notification, Visit, QueueEntry, Queue, Service, UserProfile, User, Organization)
 
 
 @router.post("/reset", status_code=204)

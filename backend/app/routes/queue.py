@@ -24,9 +24,9 @@ def check_organization(session: Session, organization_id: str) -> None:
 
 
 def entry_out(session: Session, entry: QueueEntry) -> QueueEntryPublic:
-    service = session.get(Service, entry.service_id)
+    service = queue_engine.service_of(session, entry)
     wait = wait_time.estimate_wait(entry.position, service)
-    return QueueEntryPublic.model_validate(entry, update={"estimated_wait": wait})
+    return QueueEntryPublic.model_validate(entry, update={"service_id": service.id, "estimated_wait": wait})
 
 
 @router.get("/services/{service_id}/queue", response_model=QueueLine)
@@ -42,7 +42,7 @@ def view_line(
     spots = [QueueSpot(id=e.id, position=e.position, status=e.status, is_me=e.user_id == user.id) for e in current]
     return QueueLine(
         service_id=service.id,
-        is_open=service.is_open,
+        is_open=queue_engine.is_open(session, service),
         length=len(current),
         entries=spots,
         join_position=normal_position,

@@ -8,7 +8,7 @@ from sqlmodel import Session, col, select
 
 from app.errors import ApiError
 from app.logic import notifications, queue_engine, wait_time
-from app.models import Organization, QueueEntry, Service, User, Visit
+from app.models import Organization, Queue, QueueEntry, Service, User, Visit
 from app.models.service import (
     AdminQueue,
     AdminQueueEntry,
@@ -48,10 +48,12 @@ def list_services(session: Session, organization_id: str) -> list[Service]:
 
 
 def create_service(session: Session, organization_id: str, data: ServiceCreate) -> Service:
-    """Add a service. It starts closed; the admin opens it when ready."""
+    """Add a service and its queue. Both start closed; the admin opens it when ready."""
     get_organization(session, organization_id)
-    service = Service(organization_id=organization_id, is_open=False, **data.model_dump())
+    service = Service(organization_id=organization_id, **data.model_dump())
     session.add(service)
+    session.flush()  # write the service first, or the queue's foreign key rejects it
+    session.add(Queue(service_id=service.id, status="closed"))
     return service
 
 
@@ -68,10 +70,13 @@ def update_service(session: Session, service: Service, data: ServiceUpdate) -> S
 
 
 def set_open(session: Session, service: Service, is_open: bool) -> None:
-    """Open or close the line. People already in it keep their place either way."""
-    if service.is_open == is_open:
+    """Open or close the service's queue. People already in line keep their place either way."""
+    queue = queue_engine.queue_for(session, service)
+    status = "open" if is_open else "closed"
+    if queue.status == status:
         return
-    service.is_open = is_open
+    queue.status = status
+    session.add(queue)
 
     organization = session.get(Organization, service.organization_id)
     waiting = queue_engine.line(session, service.id)
@@ -86,10 +91,11 @@ def set_open(session: Session, service: Service, is_open: bool) -> None:
 
 
 def to_public(session: Session, service: Service) -> ServicePublic:
-    """The service plus its line length and the wait for someone joining now."""
+    """The service plus whether its queue is open, its line length and the wait for someone joining now."""
     current = queue_engine.line(session, service.id)
     wait = wait_time.estimate_wait(queue_engine.join_position(current, "normal"), service)
-    return ServicePublic.model_validate(service, update={"queue_length": len(current), "estimated_wait": wait})
+    extra = {"is_open": queue_engine.is_open(session, service), "queue_length": len(current), "estimated_wait": wait}
+    return ServicePublic.model_validate(service, update=extra)
 
 
 def admin_queue(session: Session, service: Service) -> AdminQueue:
